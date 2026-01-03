@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Anugraha Stays</string>
+
+    <!-- Login Screen -->
+    <string name="admin_login">Admin Login</string>
+    <string name="welcome_back">Welcome back, please log in.</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="forgot_password">Forgot Password?</string>
+    <string name="submit">Submit</string>
+    <string name="dont_have_account">Don\'t have an account?</string>
+    <string name="sign_up">Sign Up</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard">Dashboard</string>
+    <string name="todays_checkins">Today\'s Check-ins</string>
+    <string name="todays_checkout">Today\'s Check-out</string>
+    <string name="upcoming_checkins">Upcoming Check-ins (This Week)</string>
+    <string name="pending_reservations">Pending Reservations</string>
+    <string name="no_bookings_today">No bookings today</string>
+
+    <!-- Reservations -->
+    <string name="approved_reservations">Approved Reservations</string>
+    <string name="search_reservations">Search reservations...</string>
+    <string name="booking_from">Booking from: %s</string>
+    <string name="guests">%d Guests</string>
+    <string name="guest">%d Guest</string>
+
+    <!-- Calendar -->
+    <string name="availability">Availability</string>
+    <string name="no_bookings_found">No bookings found</string>
+    <string name="mark_as_closed">Mark as Closed</string>
+    <string name="mark_as_open">Mark as Open</string>
+    <string name="check_in">Check-in</string>
+    <string name="check_out">Check-out</string>
+
+    <!-- Booking Details -->
+    <string name="booking_details">Booking Details</string>
+    <string name="guest_information">Guest Information</string>
+    <string name="guest_name">Guest Name</string>
+    <string name="mobile_number">Mobile Number</string>
+    <string name="total_guests">Total Guests</string>
+    <string name="pets">Pets</string>
+    <string name="booking_number">Booking Number</string>
+    <string name="room_type">Room Type</string>
+    <string name="est_checkin_time">Est. Check-in Time</string>
+    <string name="payment_information">Payment Information</string>
+    <string name="payment_status">Payment Status</string>
+    <string name="total_amount">Total Amount</string>
+    <string name="transaction_number">Transaction Number</string>
+    <string name="call">CALL</string>
+
+    <!-- Statements -->
+    <string name="statement_generation">Statement Generation</string>
+    <string name="select_date_range">Select date range</string>
+    <string name="start_date">Start Date</string>
+    <string name="end_date">End Date</string>
+    <string name="statement_for">Statement for %s</string>
+    <string name="total_revenue">Total Revenue</string>
+    <string name="total_bookings">Total Bookings</string>
+    <string name="export_to_pdf">Export to PDF</string>
+
+    <!-- New Booking -->
+    <string name="add_new_booking">Add New Booking</string>
+    <string name="guest_information_caps">GUEST INFORMATION</string>
+    <string name="guest_email">Guest Email</string>
+    <string name="contact_number">Contact Number</string>
+    <string name="booking_details_caps">BOOKING DETAILS</string>
+    <string name="checkin_date">Check-in Date</string>
+    <string name="checkout_date">Check-out Date</string>
+    <string name="select_date">Select date</string>
+    <string name="approx_arrival_time">Approx. Arrival Time</string>
+    <string name="number_of_guests">Number of Guests</string>
+    <string name="pet">Pet?</string>
+    <string name="payment_details_caps">PAYMENT DETAILS</string>
+    <string name="amount_paid">Amount Paid</string>
+    <string name="transaction_id">Transaction ID</string>
+    <string name="enter_id_optional">Enter ID (optional)</string>
+    <string name="booking_source_caps">BOOKING SOURCE</string>
+    <string name="direct">Direct</string>
+    <string name="website">Website</string>
+    <string name="airbnb">Airbnb</string>
+    <string name="booking_com">Booking.com</string>
+
+    <!-- Bottom Navigation -->
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_reservations">Reservations</string>
+    <string name="nav_calendar">Calendar</string>
+    <string name="nav_statements">Statements</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Actions -->
+    <string name="details">Details</string>
+    <string name="accept">Accept</string>
+    <string name="decline">Decline</string>
+
+    <!-- Common -->
+    <string name="loading">Loading...</string>
+    <string name="error_occurred">An error occurred</string>
+    <string name="retry">Retry</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="adults">Adults</string>
+    <string name="paid">Paid</string>
+</resources>
