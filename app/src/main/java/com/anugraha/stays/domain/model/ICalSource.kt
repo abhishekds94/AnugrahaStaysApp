@@ -13,8 +13,8 @@ enum class ICalSource {
 
     fun getDisplayName(): String {
         return when (this) {
-            AIRBNB -> "Booking from Airbnb"
-            BOOKING_COM -> "Booking from Booking.com"
+            AIRBNB -> "Booking on Airbnb"
+            BOOKING_COM -> "Booking on Booking.com"
         }
     }
 }

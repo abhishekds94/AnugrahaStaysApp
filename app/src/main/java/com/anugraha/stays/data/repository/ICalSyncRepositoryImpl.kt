@@ -30,44 +30,18 @@ class ICalSyncRepositoryImpl @Inject constructor(
 
                 configs.forEach { config ->
                     try {
-                        Log.d("ICalSync", "")
                         Log.d("ICalSync", "📥 Syncing ${config.source.name}")
-                        Log.d("ICalSync", "   URL: ${config.url}")
 
                         val icalContent = fetchICalContent(config.url)
-                        Log.d("ICalSync", "   ✅ Fetched iCal content (${icalContent.length} bytes)")
-
                         val events = parser.parseICalString(icalContent, config.source)
-                        Log.d("ICalSync", "   ✅ Parsed ${events.size} events from ${config.source.name}")
-                        Log.d("ICalSync", "")
+                        Log.d("ICalSync", "✅ Parsed ${events.size} events from ${config.source.name}")
 
-                        // LOG EACH EVENT IN DETAIL
-                        events.forEachIndexed { index, event ->
-                            Log.d("ICalSync", "   📅 Event #${index + 1}:")
-                            Log.d("ICalSync", "      UID: ${event.uid}")
-                            Log.d("ICalSync", "      Summary: ${event.summary}")
-                            Log.d("ICalSync", "      Check-in: ${event.startDate}")
-                            Log.d("ICalSync", "      Check-out: ${event.endDate}")
-                            Log.d("ICalSync", "      Nights: ${java.time.temporal.ChronoUnit.DAYS.between(event.startDate, event.endDate)}")
-                            Log.d("ICalSync", "      Source: ${event.source.name}")
+                        // Convert to reservations
+                        val reservations = events.map { event ->
+                            createReservationFromEvent(event)
                         }
 
-                        val reservations = events.map { it.toReservation() }
-
-                        // LOG CONVERTED RESERVATIONS
-                        Log.d("ICalSync", "")
-                        Log.d("ICalSync", "   🔄 Converting to Reservation objects...")
-                        reservations.forEachIndexed { index, res ->
-                            Log.d("ICalSync", "   🏨 Reservation #${index + 1}:")
-                            Log.d("ICalSync", "      ID: ${res.id}")
-                            Log.d("ICalSync", "      Number: ${res.reservationNumber}")
-                            Log.d("ICalSync", "      Guest: ${res.primaryGuest.fullName}")
-                            Log.d("ICalSync", "      Source: ${res.bookingSource.displayName()}")
-                            Log.d("ICalSync", "      Check-in: ${res.checkInDate}")
-                            Log.d("ICalSync", "      Check-out: ${res.checkOutDate}")
-                            Log.d("ICalSync", "      Status: ${res.status}")
-                        }
-
+                        // Save to database
                         val entities = events.map { event ->
                             ExternalBookingEntity(
                                 uid = event.uid,
@@ -79,56 +53,26 @@ class ICalSyncRepositoryImpl @Inject constructor(
                             )
                         }
 
-                        Log.d("ICalSync", "")
-                        Log.d("ICalSync", "   💾 Saving to database...")
-                        Log.d("ICalSync", "   🗑️ Deleting old ${config.source.name} bookings...")
                         externalBookingDao.deleteBySource(config.source.name)
-
-                        Log.d("ICalSync", "   💾 Inserting ${entities.size} new bookings...")
                         externalBookingDao.insertAll(entities)
-
-                        Log.d("ICalSync", "   ✅ Database updated successfully")
 
                         allReservations.addAll(reservations)
 
+                        Log.d("ICalSync", "✅ Saved ${entities.size} bookings from ${config.source.name}")
+
                     } catch (e: Exception) {
-                        Log.e("ICalSync", "   ❌ ERROR syncing ${config.source.name}: ${e.message}", e)
-                        Log.e("ICalSync", "   Stack trace:", e)
+                        Log.e("ICalSync", "❌ Error syncing ${config.source.name}: ${e.message}", e)
                     }
                 }
 
-                Log.d("ICalSync", "")
                 Log.d("ICalSync", "═══════════════════════════════════════════")
-                Log.d("ICalSync", "✅ SYNC COMPLETE")
-                Log.d("ICalSync", "   Total reservations synced: ${allReservations.size}")
-                Log.d("ICalSync", "")
-
-                // LOG SUMMARY BY SOURCE
-                val airbnbCount = allReservations.count { it.bookingSource == BookingSource.AIRBNB }
-                val bookingComCount = allReservations.count { it.bookingSource == BookingSource.BOOKING_COM }
-
-                Log.d("ICalSync", "   📊 SUMMARY:")
-                Log.d("ICalSync", "      Airbnb: $airbnbCount bookings")
-                Log.d("ICalSync", "      Booking.com: $bookingComCount bookings")
-                Log.d("ICalSync", "")
-
-                // LOG DATE RANGES
-                if (allReservations.isNotEmpty()) {
-                    val sortedByDate = allReservations.sortedBy { it.checkInDate }
-                    Log.d("ICalSync", "   📅 DATE RANGE:")
-                    Log.d("ICalSync", "      First check-in: ${sortedByDate.first().checkInDate}")
-                    Log.d("ICalSync", "      Last check-out: ${sortedByDate.last().checkOutDate}")
-                }
-
+                Log.d("ICalSync", "✅ SYNC COMPLETE: ${allReservations.size} bookings")
                 Log.d("ICalSync", "═══════════════════════════════════════════")
 
                 NetworkResult.Success(allReservations)
             } catch (e: Exception) {
-                Log.e("ICalSync", "═══════════════════════════════════════════")
-                Log.e("ICalSync", "❌ FATAL ERROR in syncICalFeeds", e)
-                Log.e("ICalSync", "   Message: ${e.message}")
-                Log.e("ICalSync", "═══════════════════════════════════════════")
-                NetworkResult.Error(e.message ?: "Failed to sync iCal feeds")
+                Log.e("ICalSync", "❌ FATAL ERROR: ${e.message}", e)
+                NetworkResult.Error(e.message ?: "Failed to sync")
             }
         }
     }
@@ -137,7 +81,9 @@ class ICalSyncRepositoryImpl @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val entities = externalBookingDao.getAllBookings()
-                entities.map { it.toDomain() }
+                entities.map { entity ->
+                    createReservationFromEntity(entity)
+                }
             } catch (e: Exception) {
                 Log.e("ICalSync", "Error getting external bookings", e)
                 emptyList()
@@ -164,19 +110,63 @@ class ICalSyncRepositoryImpl @Inject constructor(
         }
     }
 
-    private fun ICalEvent.toReservation(): Reservation {
+    // ✅ SIMPLE: Create reservation with proper display name
+    private fun createReservationFromEvent(event: ICalEvent): Reservation {
+        val displayName = when (event.source) {
+            ICalSource.AIRBNB -> "Booking on Airbnb"
+            ICalSource.BOOKING_COM -> "Booking on Booking.com"
+        }
+
         return Reservation(
-            id = uid.hashCode(),
-            reservationNumber = "EXT-${source.name}-${uid.take(8)}",
+            id = event.uid.hashCode(),
+            reservationNumber = "EXT-${event.source.name}-${event.uid.take(8)}",
             status = ReservationStatus.APPROVED,
-            checkInDate = startDate,
-            checkOutDate = endDate,
+            checkInDate = event.startDate,
+            checkOutDate = event.endDate,
             adults = 2,
             kids = 0,
             hasPet = false,
             totalAmount = 0.0,
             primaryGuest = Guest(
-                fullName = source.getDisplayName(),
+                fullName = displayName,  // ✅ "Booking on Airbnb" or "Booking on Booking.com"
+                phone = "",
+                email = ""
+            ),
+            room = null,
+            bookingSource = event.source.toBookingSource(),
+            estimatedCheckInTime = null,
+            transactionId = null,
+            paymentStatus = "N/A",
+            transportService = "No",
+            paymentReference = null
+        )
+    }
+
+    // ✅ SIMPLE: Create from database entity
+    private fun createReservationFromEntity(entity: ExternalBookingEntity): Reservation {
+        val source = when (entity.source) {
+            "AIRBNB" -> ICalSource.AIRBNB
+            "BOOKING_COM" -> ICalSource.BOOKING_COM
+            else -> ICalSource.AIRBNB
+        }
+
+        val displayName = when (source) {
+            ICalSource.AIRBNB -> "Booking on Airbnb"
+            ICalSource.BOOKING_COM -> "Booking on Booking.com"
+        }
+
+        return Reservation(
+            id = entity.uid.hashCode(),
+            reservationNumber = entity.reservationNumber,
+            status = ReservationStatus.APPROVED,
+            checkInDate = com.anugraha.stays.util.DateUtils.parseDate(entity.checkInDate),
+            checkOutDate = com.anugraha.stays.util.DateUtils.parseDate(entity.checkOutDate),
+            adults = 2,
+            kids = 0,
+            hasPet = false,
+            totalAmount = 0.0,
+            primaryGuest = Guest(
+                fullName = displayName,  // ✅ "Booking on Airbnb" or "Booking on Booking.com"
                 phone = "",
                 email = ""
             ),
