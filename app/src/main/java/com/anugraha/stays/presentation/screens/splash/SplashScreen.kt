@@ -27,7 +27,9 @@ fun SplashScreen(
 ) {
     LaunchedEffect(Unit) {
         delay(2000)
-        if (viewModel.isUserLoggedIn()) {
+        val isLoggedIn = viewModel.isUserLoggedIn()
+        if (isLoggedIn) {
+            viewModel.syncICalFeedsInBackground()
             onNavigateToDashboard()
         } else {
             onNavigateToLogin()

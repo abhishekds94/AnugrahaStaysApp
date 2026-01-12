@@ -5,6 +5,7 @@ import com.anugraha.stays.data.remote.api.AnugrahaApi
 import com.anugraha.stays.data.remote.dto.toDomain
 import com.anugraha.stays.domain.model.Reservation
 import com.anugraha.stays.domain.model.ReservationStatus
+import com.anugraha.stays.domain.repository.ICalSyncRepository  // ADD THIS
 import com.anugraha.stays.domain.repository.ReservationRepository
 import com.anugraha.stays.util.NetworkResult
 import kotlinx.coroutines.async
@@ -16,7 +17,8 @@ import java.time.LocalDate
 import javax.inject.Inject
 
 class ReservationRepositoryImpl @Inject constructor(
-    private val api: AnugrahaApi
+    private val api: AnugrahaApi,
+    private val iCalSyncRepository: ICalSyncRepository  // ADD THIS
 ) : ReservationRepository {
 
     private var cachedReservations: List<Reservation> = emptyList()
@@ -37,11 +39,8 @@ class ReservationRepositoryImpl @Inject constructor(
                 checkInDate = checkInDate?.toString()
             )
 
-            Log.d("ReservationRepo", "Response code: ${response.code()}")
-
             if (response.isSuccessful) {
                 val body = response.body()
-                Log.d("ReservationRepo", "Raw response body size: ${body?.size}")
 
                 if (body.isNullOrEmpty()) {
                     Log.w("ReservationRepo", "API returned empty list")
@@ -49,12 +48,22 @@ class ReservationRepositoryImpl @Inject constructor(
                     return NetworkResult.Success(emptyList())
                 }
 
-                // SOLUTION: Fetch full details for each reservation to get guest names
-                val reservations = fetchFullReservationDetails(body.map { it.id ?: 0 })
+                // Fetch full details for API reservations
+                val apiReservations = fetchFullReservationDetails(body.map { it.id ?: 0 })
 
-                Log.d("ReservationRepo", "Successfully fetched ${reservations.size} reservations with full details")
-                cachedReservations = reservations
-                NetworkResult.Success(reservations)
+                // GET EXTERNAL BOOKINGS (only if status is null or approved)
+                val externalBookings = if (status == null || status == ReservationStatus.APPROVED) {
+                    iCalSyncRepository.getExternalBookings()
+                } else {
+                    emptyList()
+                }
+
+                // MERGE
+                val allReservations = apiReservations + externalBookings
+
+                Log.d("ReservationRepo", "Total reservations: ${allReservations.size} (${apiReservations.size} API + ${externalBookings.size} external)")
+                cachedReservations = allReservations
+                NetworkResult.Success(allReservations)
             } else {
                 val errorBody = response.errorBody()?.string()
                 Log.e("ReservationRepo", "Error ${response.code()}: $errorBody")
@@ -66,27 +75,18 @@ class ReservationRepositoryImpl @Inject constructor(
         }
     }
 
-    /**
-     * Fetches full reservation details (including guest info) for each reservation ID
-     * This solves the issue where the list endpoint doesn't include nested objects
-     */
     private suspend fun fetchFullReservationDetails(reservationIds: List<Int>): List<Reservation> {
         return coroutineScope {
             reservationIds.map { id ->
                 async {
                     try {
-                        Log.d("ReservationRepo", "Fetching full details for reservation ID: $id")
                         val response = api.getReservationById(id)
                         if (response.isSuccessful) {
-                            response.body()?.toDomain()?.also {
-                                Log.d("ReservationRepo", "Got full details: ${it.reservationNumber} - ${it.primaryGuest.fullName}")
-                            }
+                            response.body()?.toDomain()
                         } else {
-                            Log.e("ReservationRepo", "Failed to fetch details for ID $id: ${response.code()}")
                             null
                         }
                     } catch (e: Exception) {
-                        Log.e("ReservationRepo", "Exception fetching details for ID $id", e)
                         null
                     }
                 }
@@ -102,18 +102,14 @@ class ReservationRepositoryImpl @Inject constructor(
             if (response.isSuccessful) {
                 val reservation = response.body()?.toDomain()
                 if (reservation != null) {
-                    Log.d("ReservationRepo", "Found reservation: ${reservation.reservationNumber} - ${reservation.primaryGuest.fullName}")
                     NetworkResult.Success(reservation)
                 } else {
-                    Log.e("ReservationRepo", "Failed to parse reservation data")
                     NetworkResult.Error("Reservation not found or invalid data")
                 }
             } else {
-                Log.e("ReservationRepo", "Error ${response.code()}: ${response.errorBody()?.string()}")
                 NetworkResult.Error("Failed to fetch reservation: ${response.message()}")
             }
         } catch (e: Exception) {
-            Log.e("ReservationRepo", "Exception fetching reservation by id", e)
             NetworkResult.Error(e.message ?: "An error occurred")
         }
     }
@@ -122,7 +118,6 @@ class ReservationRepositoryImpl @Inject constructor(
         return try {
             val response = api.acceptReservation(id)
             if (response.isSuccessful) {
-                Log.d("ReservationRepo", "Accepted reservation: $id")
                 NetworkResult.Success(Unit)
             } else {
                 NetworkResult.Error("Failed to accept reservation: ${response.message()}")
@@ -134,29 +129,13 @@ class ReservationRepositoryImpl @Inject constructor(
 
     override suspend fun declineReservation(id: Int): NetworkResult<Unit> {
         return try {
-            android.util.Log.d("ReservationRepo", "========== DECLINE RESERVATION ==========")
-            android.util.Log.d("ReservationRepo", "Reservation ID: $id")
-            android.util.Log.d("ReservationRepo", "Calling API: POST /reservation/$id/decline")
-
             val response = api.declineReservation(id)
-
-            android.util.Log.d("ReservationRepo", "Response code: ${response.code()}")
-            android.util.Log.d("ReservationRepo", "Response message: ${response.message()}")
-            android.util.Log.d("ReservationRepo", "Response body: ${response.body()}")
-            android.util.Log.d("ReservationRepo", "Response error body: ${response.errorBody()?.string()}")
-
             if (response.isSuccessful) {
-                android.util.Log.d("ReservationRepo", "✅ Declined reservation: $id")
-                android.util.Log.d("ReservationRepo", "========================================")
                 NetworkResult.Success(Unit)
             } else {
-                android.util.Log.e("ReservationRepo", "❌ Failed to decline reservation: ${response.message()}")
-                android.util.Log.d("ReservationRepo", "========================================")
                 NetworkResult.Error("Failed to decline reservation: ${response.message()}")
             }
         } catch (e: Exception) {
-            android.util.Log.e("ReservationRepo", "❌ Exception in declineReservation: ${e.message}", e)
-            android.util.Log.d("ReservationRepo", "========================================")
             NetworkResult.Error(e.message ?: "An error occurred")
         }
     }

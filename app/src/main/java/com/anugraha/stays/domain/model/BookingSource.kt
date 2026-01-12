@@ -26,4 +26,17 @@ enum class BookingSource {
             BOOKING_COM -> "Booking.com"
         }
     }
+
+    // ADD THESE HELPER METHODS
+    fun isExternal(): Boolean {
+        return this == AIRBNB || this == BOOKING_COM
+    }
+
+    fun getExternalDisplayName(): String {
+        return when (this) {
+            AIRBNB -> "Booking from Airbnb"
+            BOOKING_COM -> "Booking from Booking.com"
+            else -> displayName()
+        }
+    }
 }

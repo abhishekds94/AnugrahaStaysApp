@@ -12,7 +12,6 @@ import com.anugraha.stays.domain.model.CheckIn
 import com.anugraha.stays.presentation.components.BookingCard
 import com.anugraha.stays.presentation.components.EmptyState
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
-import com.anugraha.stays.util.DateUtils.toDisplayFormat
 
 @Composable
 fun CheckInSection(
@@ -34,17 +33,9 @@ fun CheckInSection(
             EmptyState(message = "No bookings today")
         } else {
             checkIns.forEach { checkIn ->
-                val additionalInfo = buildString {
-                    append("Check-in: ${checkIn.reservation.checkInDate.toDisplayFormat()}")
-                    checkIn.checkInTime?.let {
-                        append(" at $it")
-                    }
-                }
-
+                // UPDATED: Pass reservation object and onClick
                 BookingCard(
-                    guestName = checkIn.reservation.primaryGuest.fullName,
-                    phoneNumber = checkIn.reservation.primaryGuest.phone,
-                    additionalInfo = additionalInfo,
+                    reservation = checkIn.reservation,
                     onClick = { onBookingClick(checkIn) },
                     modifier = Modifier.padding(bottom = 12.dp)
                 )

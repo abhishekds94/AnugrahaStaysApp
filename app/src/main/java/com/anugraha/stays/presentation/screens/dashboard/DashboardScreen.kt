@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,31 +39,26 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = "Dashboard",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+                title = { Text("Dashboard", fontWeight = FontWeight.Bold) },
                 actions = {
-                    IconButton(onClick = { /* TODO: Notifications */ }) {
+                    // ADD THIS SYNC BUTTON
+                    IconButton(onClick = {
+                        viewModel.handleIntent(DashboardIntent.ForceResync)
+                    }) {
                         Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = "Notifications"
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Force re-sync"
                         )
                     }
-                    IconButton(onClick = { /* TODO: Profile */ }) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Profile",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+
+                    // Your existing actions...
+                    IconButton(onClick = { /* notifications */ }) {
+                        Icon(Icons.Default.Notifications, contentDescription = "Notifications")
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                    IconButton(onClick = { /* profile */ }) {
+                        Icon(Icons.Default.Person, contentDescription = "Profile")
+                    }
+                }
             )
         }
     ) { paddingValues ->
