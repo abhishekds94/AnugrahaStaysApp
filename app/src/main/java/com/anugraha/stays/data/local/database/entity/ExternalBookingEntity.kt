@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.anugraha.stays.domain.model.*
+import com.anugraha.stays.util.DateUtils
 import java.time.LocalDate
 
 @Entity(tableName = "external_bookings")
@@ -34,8 +35,8 @@ data class ExternalBookingEntity(
             id = uid.hashCode(),
             reservationNumber = reservationNumber,
             status = ReservationStatus.APPROVED,
-            checkInDate = LocalDate.parse(checkInDate),
-            checkOutDate = LocalDate.parse(checkOutDate),
+            checkInDate = DateUtils.parseDate(checkInDate),
+            checkOutDate = DateUtils.parseDate(checkOutDate),
             adults = 2,
             kids = 0,
             hasPet = false,

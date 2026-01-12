@@ -2,6 +2,7 @@ package com.anugraha.stays.data.remote.dto
 
 import com.anugraha.stays.domain.model.Availability
 import com.anugraha.stays.domain.model.AvailabilityStatus
+import com.anugraha.stays.util.DateUtils
 import com.google.gson.annotations.SerializedName
 import java.time.LocalDate
 
@@ -28,7 +29,7 @@ fun AvailabilityDto.toDomain(): Availability? {
     return try {
         Availability(
             id = id,
-            date = LocalDate.parse(date),
+            date = DateUtils.parseDate(date),
             status = AvailabilityStatus.fromString(status ?: "open"),
             roomId = roomId,
             reservation = reservation?.toDomain(),

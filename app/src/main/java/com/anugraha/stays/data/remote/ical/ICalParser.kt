@@ -113,18 +113,28 @@ class ICalParser {
         return try {
             val cleanDate = dateString.replace("VALUE=DATE:", "")
 
-            when {
+            val date = when {
                 cleanDate.contains('T') -> {
-                    LocalDate.parse(cleanDate.take(8), DateTimeFormatter.BASIC_ISO_DATE)
+                    // Has time component - parse as date-time in IST
+                    val dateTimeStr = cleanDate.take(15) // YYYYMMDDTHHmmss
+                    java.time.LocalDateTime.parse(dateTimeStr, java.time.format.DateTimeFormatter.BASIC_ISO_DATE)
+                        .atZone(com.anugraha.stays.util.DateUtils.IST_ZONE)
+                        .toLocalDate()
                 }
                 cleanDate.length == 8 -> {
-                    LocalDate.parse(cleanDate, DateTimeFormatter.BASIC_ISO_DATE)
+                    // YYYYMMDD format
+                    java.time.LocalDate.parse(cleanDate, java.time.format.DateTimeFormatter.BASIC_ISO_DATE)
                 }
                 cleanDate.contains('-') -> {
-                    LocalDate.parse(cleanDate.take(10))
+                    // YYYY-MM-DD format
+                    java.time.LocalDate.parse(cleanDate.take(10))
                 }
                 else -> null
             }
+
+            Log.d("ICalParser", "Parsed date: $dateString → $date (IST)")
+            date
+
         } catch (e: Exception) {
             Log.e("ICalParser", "Error parsing date '$dateString': ${e.message}")
             null

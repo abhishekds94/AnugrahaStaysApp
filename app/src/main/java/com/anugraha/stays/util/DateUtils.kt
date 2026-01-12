@@ -1,78 +1,125 @@
 package com.anugraha.stays.util
 
-import java.time.*
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.time.temporal.TemporalAdjusters
+import java.time.temporal.ChronoUnit
 
 object DateUtils {
-    private val apiFormatter = DateTimeFormatter.ofPattern(Constants.API_DATE_FORMAT)
-    private val displayFormatter = DateTimeFormatter.ofPattern(Constants.DISPLAY_DATE_FORMAT)
-    private val timeFormatter = DateTimeFormatter.ofPattern(Constants.TIME_FORMAT)
 
-    fun LocalDate.toApiFormat(): String = this.format(apiFormatter)
+    // ✅ DEFINE IST TIMEZONE
+    val IST_ZONE: ZoneId = ZoneId.of("Asia/Kolkata")
 
-    fun LocalDate.toDisplayFormat(): String = this.format(displayFormatter)
+    // ✅ Get current date/time in IST
+    fun now(): LocalDate = LocalDate.now(IST_ZONE)
+    fun nowDateTime(): LocalDateTime = LocalDateTime.now(IST_ZONE)
+    fun nowZoned(): ZonedDateTime = ZonedDateTime.now(IST_ZONE)
 
-    fun LocalTime.toDisplayFormat(): String = this.format(timeFormatter)
-
-    fun String.toLocalDate(): LocalDate = LocalDate.parse(this, apiFormatter)
-
-    fun String.toLocalTime(): LocalTime = LocalTime.parse(this, timeFormatter)
-
-    // UPDATED: Get current week dates (Sunday to Saturday)
-    fun getCurrentWeekDates(): Pair<LocalDate, LocalDate> {
-        val today = LocalDate.now()
-        val startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-        val endOfWeek = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
-        return Pair(startOfWeek, endOfWeek)
-    }
-
-    // NEW: Get week range as list of dates
-    fun getCurrentWeekDatesList(): List<LocalDate> {
-        val today = LocalDate.now()
-        val startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
-        return (0..6).map { startOfWeek.plusDays(it.toLong()) }
-    }
-
-    fun isToday(date: LocalDate): Boolean = date == LocalDate.now()
-
-    fun isPast(date: LocalDate): Boolean = date.isBefore(LocalDate.now())
-
-    fun isFuture(date: LocalDate): Boolean = date.isAfter(LocalDate.now())
-
-    fun getDayOfWeekName(date: LocalDate): String {
-        return date.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }
-    }
-
-    // NEW: Get short day name (Mon, Tue, etc.)
-    fun getShortDayOfWeek(date: LocalDate): String {
-        return when (date.dayOfWeek) {
-            DayOfWeek.SUNDAY -> "Sun"
-            DayOfWeek.MONDAY -> "Mon"
-            DayOfWeek.TUESDAY -> "Tue"
-            DayOfWeek.WEDNESDAY -> "Wed"
-            DayOfWeek.THURSDAY -> "Thu"
-            DayOfWeek.FRIDAY -> "Fri"
-            DayOfWeek.SATURDAY -> "Sat"
+    /**
+     * Parse date string ALWAYS in IST timezone
+     */
+    fun parseDate(dateString: String): LocalDate {
+        return try {
+            // If it has time component, parse and extract date in IST
+            if (dateString.contains('T') || dateString.contains(' ')) {
+                LocalDateTime.parse(dateString.take(19))
+                    .atZone(IST_ZONE)
+                    .toLocalDate()
+            } else {
+                LocalDate.parse(dateString)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DateUtils", "Error parsing date: $dateString", e)
+            LocalDate.now(IST_ZONE)
         }
     }
 
-    // NEW: Format as "Tomorrow", "Today", or day name
+    /**
+     * Format date for display
+     */
+    fun LocalDate.toDisplayFormat(): String {
+        val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy")
+        return this.format(formatter)
+    }
+
+    /**
+     * Format date for API (YYYY-MM-DD)
+     */
+    fun LocalDate.toApiFormat(): String {
+        return this.toString() // ISO format
+    }
+
+    /**
+     * Get current week dates (Monday to Sunday) in IST
+     */
+    fun getCurrentWeekDates(): Pair<LocalDate, LocalDate> {
+        val today = now()
+        val dayOfWeek = today.dayOfWeek.value
+        val weekStart = today.minusDays((dayOfWeek - 1).toLong())
+        val weekEnd = weekStart.plusDays(6)
+        return Pair(weekStart, weekEnd)
+    }
+
+    /**
+     * Check if date is today in IST
+     */
+    fun LocalDate.isToday(): Boolean {
+        return this.isEqual(now())
+    }
+
+    /**
+     * Get days between dates
+     */
+    fun daysBetween(start: LocalDate, end: LocalDate): Long {
+        return ChronoUnit.DAYS.between(start, end)
+    }
+
+    /**
+     * Parse time string
+     */
+    fun parseTime(timeString: String): LocalTime? {
+        return try {
+            LocalTime.parse(timeString)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Get relative day name (Today, Tomorrow, or day of week)
+     * ✅ ADDED THIS FUNCTION
+     */
     fun getRelativeDayName(date: LocalDate): String {
-        val today = LocalDate.now()
+        val today = now()
+        val tomorrow = today.plusDays(1)
+
         return when {
             date.isEqual(today) -> "Today"
-            date.isEqual(today.plusDays(1)) -> "Tomorrow"
-            date.isEqual(today.minusDays(1)) -> "Yesterday"
-            else -> getDayOfWeekName(date)
+            date.isEqual(tomorrow) -> "Tomorrow"
+            else -> {
+                // Return day of week (Mon, Tue, etc.)
+                val formatter = DateTimeFormatter.ofPattern("EEE")
+                date.format(formatter)
+            }
         }
     }
 
-    fun isWithinRange(date: LocalDate, start: LocalDate, end: LocalDate): Boolean {
-        return !date.isBefore(start) && !date.isAfter(end)
-    }
+    /**
+     * Debug function to verify IST is working
+     */
+    fun logCurrentTime() {
+        val istNow = now()
+        val deviceNow = LocalDate.now() // Device timezone
 
-    fun daysFromToday(date: LocalDate): Long {
-        return Period.between(LocalDate.now(), date).days.toLong()
+        android.util.Log.d("DateUtils", "========== TIMEZONE CHECK ==========")
+        android.util.Log.d("DateUtils", "IST Date: $istNow")
+        android.util.Log.d("DateUtils", "Device Date: $deviceNow")
+        android.util.Log.d("DateUtils", "Match: ${istNow == deviceNow}")
+        android.util.Log.d("DateUtils", "IST Zone: $IST_ZONE")
+        android.util.Log.d("DateUtils", "Device Zone: ${ZoneId.systemDefault()}")
+        android.util.Log.d("DateUtils", "====================================")
     }
 }

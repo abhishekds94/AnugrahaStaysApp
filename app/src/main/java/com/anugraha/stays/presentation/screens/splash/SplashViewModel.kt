@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.anugraha.stays.domain.repository.AuthRepository
 import com.anugraha.stays.domain.usecase.ical.SyncICalFeedsUseCase  // ADD THIS
+import com.anugraha.stays.util.DateUtils
 import com.anugraha.stays.util.NetworkResult  // ADD THIS
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -19,6 +20,10 @@ class SplashViewModel @Inject constructor(
 
     suspend fun isUserLoggedIn(): Boolean {
         return authRepository.isUserLoggedIn()
+    }
+
+    init {
+        DateUtils.logCurrentTime() // ✅ Add this for testing
     }
 
     // ADD THIS FUNCTION - Call this from SplashScreen after checking auth

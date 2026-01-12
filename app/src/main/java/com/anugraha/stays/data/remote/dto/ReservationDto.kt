@@ -6,6 +6,7 @@ import com.anugraha.stays.domain.model.Reservation
 import com.anugraha.stays.domain.model.ReservationStatus
 import com.anugraha.stays.domain.model.Guest
 import com.anugraha.stays.domain.model.Room
+import com.anugraha.stays.util.DateUtils
 import com.google.gson.annotations.SerializedName
 import java.time.LocalDate
 import java.time.LocalTime
@@ -156,7 +157,7 @@ fun ReservationDto.toDomain(): Reservation? {
 
 private fun parseDate(dateString: String): LocalDate {
     return try {
-        LocalDate.parse(dateString)
+        DateUtils.parseDate(dateString)
     } catch (e: Exception) {
         Log.e("ReservationDto", "Error parsing date: $dateString", e)
         LocalDate.now()

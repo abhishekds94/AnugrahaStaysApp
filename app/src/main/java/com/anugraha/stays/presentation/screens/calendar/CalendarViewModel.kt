@@ -7,6 +7,7 @@ import com.anugraha.stays.domain.usecase.availability.GetAvailabilityUseCase
 import com.anugraha.stays.domain.usecase.availability.UpdateAvailabilityUseCase
 import com.anugraha.stays.domain.usecase.reservation.DeclineReservationUseCase
 import com.anugraha.stays.domain.usecase.reservation.GetReservationsUseCase
+import com.anugraha.stays.util.DateUtils
 import com.anugraha.stays.util.NetworkResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +30,7 @@ class CalendarViewModel @Inject constructor(
     val state: StateFlow<CalendarState> = _state.asStateFlow()
 
     init {
-        handleIntent(CalendarIntent.LoadMonth(YearMonth.now()))
+        handleIntent(CalendarIntent.LoadMonth(YearMonth.from(DateUtils.now())))
         handleIntent(CalendarIntent.LoadBookings)
     }
 

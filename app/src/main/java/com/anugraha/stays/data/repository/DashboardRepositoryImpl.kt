@@ -57,7 +57,7 @@ class DashboardRepositoryImpl @Inject constructor(
 
                 // GET EXTERNAL BOOKINGS
                 val externalBookings = iCalSyncRepository.getExternalBookings()
-                val today = LocalDate.now()
+                val today = DateUtils.now()
 
                 val externalCheckIns = externalBookings
                     .filter { it.checkInDate == today }
@@ -81,7 +81,7 @@ class DashboardRepositoryImpl @Inject constructor(
 
     override suspend fun getTodayCheckOuts(): NetworkResult<List<CheckOut>> {
         return try {
-            val today = LocalDate.now()
+            val today = DateUtils.now()
             Log.d("DashboardRepo", "Computing today's check-outs for date: $today")
 
             val response = api.getReservations(
@@ -138,7 +138,7 @@ class DashboardRepositoryImpl @Inject constructor(
     override suspend fun getThisWeekBookings(): NetworkResult<List<WeekBooking>> {
         return try {
             val (weekStart, weekEnd) = DateUtils.getCurrentWeekDates()
-            val today = LocalDate.now()
+            val today = DateUtils.now()
 
             val response = api.getReservations(
                 status = "approved",
