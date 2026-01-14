@@ -73,7 +73,15 @@ class DashboardViewModel @Inject constructor(
 
     private fun loadData() {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
+            _state.update {
+                it.copy(
+                    isLoading = true,
+                    isLoadingCheckIns = true,
+                    isLoadingCheckOuts = true,
+                    isLoadingWeekBookings = true,
+                    isLoadingPendingReservations = true
+                )
+            }
 
             launch { loadTodayCheckIns() }
             launch { loadTodayCheckOuts() }
@@ -100,11 +108,23 @@ class DashboardViewModel @Inject constructor(
     private suspend fun loadTodayCheckIns() {
         when (val result = getTodayCheckInsUseCase()) {
             is NetworkResult.Success -> {
-                _state.update { it.copy(todayCheckIns = result.data) }
+                _state.update {
+                    it.copy(
+                        todayCheckIns = result.data,
+                        isLoadingCheckIns = false
+                    )
+                }
             }
+
             is NetworkResult.Error -> {
-                _state.update { it.copy(error = result.message) }
+                _state.update {
+                    it.copy(
+                        error = result.message,
+                        isLoadingCheckIns = false
+                    )
+                }
             }
+
             NetworkResult.Loading -> {}
         }
     }
@@ -112,11 +132,23 @@ class DashboardViewModel @Inject constructor(
     private suspend fun loadTodayCheckOuts() {
         when (val result = getTodayCheckOutsUseCase()) {
             is NetworkResult.Success -> {
-                _state.update { it.copy(todayCheckOuts = result.data) }
+                _state.update {
+                    it.copy(
+                        todayCheckOuts = result.data,
+                        isLoadingCheckOuts = false
+                    )
+                }
             }
+
             is NetworkResult.Error -> {
-                _state.update { it.copy(error = result.message) }
+                _state.update {
+                    it.copy(
+                        error = result.message,
+                        isLoadingCheckOuts = false
+                    )
+                }
             }
+
             NetworkResult.Loading -> {}
         }
     }
@@ -124,11 +156,23 @@ class DashboardViewModel @Inject constructor(
     private suspend fun loadWeekBookings() {
         when (val result = getWeekBookingsUseCase()) {
             is NetworkResult.Success -> {
-                _state.update { it.copy(weekBookings = result.data) }
+                _state.update {
+                    it.copy(
+                        weekBookings = result.data,
+                        isLoadingWeekBookings = false
+                    )
+                }
             }
+
             is NetworkResult.Error -> {
-                _state.update { it.copy(error = result.message) }
+                _state.update {
+                    it.copy(
+                        error = result.message,
+                        isLoadingWeekBookings = false
+                    )
+                }
             }
+
             NetworkResult.Loading -> {}
         }
     }
@@ -136,11 +180,23 @@ class DashboardViewModel @Inject constructor(
     private suspend fun loadPendingReservations() {
         when (val result = getPendingReservationsUseCase()) {
             is NetworkResult.Success -> {
-                _state.update { it.copy(pendingReservations = result.data) }
+                _state.update {
+                    it.copy(
+                        pendingReservations = result.data,
+                        isLoadingPendingReservations = false
+                    )
+                }
             }
+
             is NetworkResult.Error -> {
-                _state.update { it.copy(error = result.message) }
+                _state.update {
+                    it.copy(
+                        error = result.message,
+                        isLoadingPendingReservations = false
+                    )
+                }
             }
+
             NetworkResult.Loading -> {}
         }
     }

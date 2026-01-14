@@ -18,6 +18,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.anugraha.stays.presentation.components.AnugrahaPasswordTextField
 import com.anugraha.stays.presentation.components.AnugrahaPrimaryButton
 import com.anugraha.stays.presentation.components.AnugrahaTextField
+import com.anugraha.stays.presentation.components.LoadingScreen
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
 
 @Composable
@@ -33,10 +34,12 @@ fun LoginScreen(
         }
     }
 
-    LoginContent(
-        state = state,
-        onIntent = viewModel::handleIntent
-    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        LoginContent(state = state, onIntent = viewModel::handleIntent)
+        if (state.isLoading) {
+            LoadingScreen(message = "Authenticating...")
+        }
+    }
 }
 
 @Composable

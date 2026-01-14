@@ -116,21 +116,24 @@ private fun DashboardContent(
             item {
                 CheckInSection(
                     checkIns = state.todayCheckIns,
-                    onBookingClick = { onNavigateToBookingDetails(it.reservation.id) }
+                    onBookingClick = { onNavigateToBookingDetails(it.reservation.id) },
+                    isLoading = state.isLoadingCheckIns
                 )
             }
 
             item {
                 CheckOutSection(
                     checkOuts = state.todayCheckOuts,
-                    onBookingClick = { onNavigateToBookingDetails(it.reservation.id) }
+                    onBookingClick = { onNavigateToBookingDetails(it.reservation.id) },
+                    isLoading = state.isLoadingCheckOuts
                 )
             }
 
             item {
                 WeekBookingsSection(
                     weekBookings = state.weekBookings,
-                    onBookingClick = { onNavigateToBookingDetails(it.reservation.id) }
+                    onBookingClick = { onNavigateToBookingDetails(it.reservation.id) },
+                    isLoading = state.isLoadingWeekBookings
                 )
             }
 
@@ -139,7 +142,8 @@ private fun DashboardContent(
                     pendingReservations = state.pendingReservations,
                     onDetailsClick = { onNavigateToPendingDetails(it.id) }, // UPDATED: Navigate to pending details
                     onAccept = onAcceptReservation,
-                    onDecline = onDeclineReservation
+                    onDecline = onDeclineReservation,
+                    isLoading = state.isLoadingPendingReservations
                 )
             }
 

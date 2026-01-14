@@ -12,5 +12,9 @@ data class DashboardState(
     val pendingReservations: List<Reservation> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val isRefreshing: Boolean = false
+    val isRefreshing: Boolean = false,
+    val isLoadingCheckIns: Boolean = false,
+    val isLoadingCheckOuts: Boolean = false,
+    val isLoadingWeekBookings: Boolean = false,
+    val isLoadingPendingReservations: Boolean = false
 )

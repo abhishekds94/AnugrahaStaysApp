@@ -44,7 +44,6 @@ fun CalendarScreen(
         viewModel.handleIntent(CalendarIntent.LoadBookings)
     }
 
-    // Show success snackbar
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.actionSuccess) {
@@ -56,11 +55,19 @@ fun CalendarScreen(
         }
     }
 
-    // Show error snackbar
     LaunchedEffect(state.actionError) {
         state.actionError?.let { error ->
             snackbarHostState.showSnackbar(
                 message = error,
+                duration = SnackbarDuration.Long
+            )
+        }
+    }
+
+    LaunchedEffect(state.syncFailureMessage) {
+        state.syncFailureMessage?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
                 duration = SnackbarDuration.Long
             )
         }
@@ -84,7 +91,7 @@ fun CalendarScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         when {
-            state.isLoading -> LoadingScreen()
+            state.isLoading -> LoadingScreen(message = "Loading calendar data...")
             state.error != null -> ErrorScreen(
                 message = state.error ?: "Unknown error",
                 onRetry = { viewModel.handleIntent(CalendarIntent.LoadBookings) }

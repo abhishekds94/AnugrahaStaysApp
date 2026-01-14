@@ -11,13 +11,15 @@ import androidx.compose.ui.unit.dp
 import com.anugraha.stays.domain.model.CheckOut
 import com.anugraha.stays.presentation.components.BookingCard
 import com.anugraha.stays.presentation.components.EmptyState
+import com.anugraha.stays.presentation.components.SectionLoadingIndicator
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
 
 @Composable
 fun CheckOutSection(
     checkOuts: List<CheckOut>,
     onBookingClick: (CheckOut) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isLoading: Boolean = false
 ) {
     Column(modifier = modifier) {
         Text(
@@ -29,18 +31,24 @@ fun CheckOutSection(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (checkOuts.isEmpty()) {
-            EmptyState(message = "No bookings today")
-        } else {
-            checkOuts.forEach { checkOut ->
-                // UPDATED: Pass reservation object and onClick
-                BookingCard(
-                    reservation = checkOut.reservation,
-                    onClick = { onBookingClick(checkOut) },
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
+        when {
+            isLoading -> {
+                SectionLoadingIndicator(message = "Loading check-outs...")
+            }
+            checkOuts.isEmpty() -> {
+                EmptyState(message = "No bookings today")
+            }
+            else -> {
+                checkOuts.forEach { checkOut ->
+                    BookingCard(
+                        reservation = checkOut.reservation,
+                        onClick = { onBookingClick(checkOut) },
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
             }
         }
+
     }
 }
 

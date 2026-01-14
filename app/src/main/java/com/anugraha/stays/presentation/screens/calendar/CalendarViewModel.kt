@@ -17,29 +17,61 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.YearMonth
 import javax.inject.Inject
+import com.anugraha.stays.domain.model.ICalSource
+import com.anugraha.stays.domain.repository.ICalSyncRepository
 
 @HiltViewModel
 class CalendarViewModel @Inject constructor(
     private val getAvailabilityUseCase: GetAvailabilityUseCase,
     private val updateAvailabilityUseCase: UpdateAvailabilityUseCase,
     private val getReservationsUseCase: GetReservationsUseCase,
-    private val declineReservationUseCase: DeclineReservationUseCase
+    private val declineReservationUseCase: DeclineReservationUseCase,
+    private val iCalSyncRepository: ICalSyncRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CalendarState())
     val state: StateFlow<CalendarState> = _state.asStateFlow()
 
     init {
-        handleIntent(CalendarIntent.LoadMonth(YearMonth.from(DateUtils.now())))
-        handleIntent(CalendarIntent.LoadBookings)
+        loadAllData()
+    }
+
+    private fun loadAllData() {
+        viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    isLoading = true,
+                    syncFailureMessage = null,
+                    failedSources = emptyList()
+                )
+            }
+
+            val availabilityJob = launch { loadMonth(YearMonth.from(DateUtils.now())) }
+            val bookingsJob = launch { loadBookings() }
+            val externalJob = launch { syncExternalBookings() }
+
+            availabilityJob.join()
+            bookingsJob.join()
+            externalJob.join()
+
+            _state.update { it.copy(isLoading = false) }
+        }
     }
 
     fun handleIntent(intent: CalendarIntent) {
         when (intent) {
-            is CalendarIntent.LoadMonth -> loadMonth(intent.yearMonth)
+            is CalendarIntent.LoadMonth -> {
+                viewModelScope.launch {
+                    loadMonth(intent.yearMonth)
+                }
+            }
             is CalendarIntent.DateSelected -> selectDate(intent.date)
             is CalendarIntent.ToggleAvailability -> toggleAvailability(intent.date)
-            is CalendarIntent.LoadBookings -> loadBookings()
+            is CalendarIntent.LoadBookings -> {
+                viewModelScope.launch {
+                    loadBookings()
+                }
+            }
             is CalendarIntent.BlockDate -> blockDate(intent.date)
             is CalendarIntent.OpenDate -> openDate(intent.date)
             is CalendarIntent.CancelBooking -> cancelBooking(intent.reservationId, intent.date)
@@ -54,62 +86,92 @@ class CalendarViewModel @Inject constructor(
         }
     }
 
-    private fun loadMonth(yearMonth: YearMonth) {
-        viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null, currentMonth = yearMonth) }
+    private suspend fun loadMonth(yearMonth: YearMonth) {
+        _state.update { it.copy(currentMonth = yearMonth) }
 
-            when (val result = getAvailabilityUseCase(yearMonth)) {
-                is NetworkResult.Success -> {
-                    _state.update {
-                        it.copy(
-                            availabilities = result.data,
-                            isLoading = false,
-                            actionSuccess = false
-                        )
-                    }
-                    android.util.Log.d("CalendarViewModel", "Loaded ${result.data.size} availabilities for $yearMonth")
+        when (val result = getAvailabilityUseCase(yearMonth)) {
+            is NetworkResult.Success -> {
+                _state.update {
+                    it.copy(
+                        availabilities = result.data,
+                        actionSuccess = false
+                    )
                 }
-                is NetworkResult.Error -> {
-                    _state.update {
-                        it.copy(
-                            error = result.message,
-                            isLoading = false
-                        )
-                    }
-                }
-                NetworkResult.Loading -> {}
+                android.util.Log.d("CalendarViewModel", "Loaded ${result.data.size} availabilities for $yearMonth")
             }
+            is NetworkResult.Error -> {
+                _state.update {
+                    it.copy(error = result.message)
+                }
+            }
+            NetworkResult.Loading -> {}
         }
     }
 
-    private fun loadBookings() {
-        viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
-
-            when (val result = getReservationsUseCase(
-                page = 1,
-                perPage = 1000,
-                status = null
-            )) {
-                is NetworkResult.Success -> {
-                    _state.update {
-                        it.copy(
-                            reservations = result.data,
-                            isLoading = false,
-                            error = null
-                        )
-                    }
+    private suspend fun loadBookings() {
+        when (val result = getReservationsUseCase(
+            page = 1,
+            perPage = 1000,
+            status = null
+        )) {
+            is NetworkResult.Success -> {
+                _state.update {
+                    it.copy(
+                        reservations = result.data,
+                        error = null
+                    )
                 }
-                is NetworkResult.Error -> {
-                    _state.update {
-                        it.copy(
-                            isLoading = false,
-                            error = result.message
-                        )
-                    }
-                }
-                NetworkResult.Loading -> {}
             }
+            is NetworkResult.Error -> {
+                _state.update {
+                    it.copy(error = result.message)
+                }
+            }
+            NetworkResult.Loading -> {}
+        }
+    }
+
+    private suspend fun syncExternalBookings() {
+        android.util.Log.d("CalendarViewModel", "🔄 Starting external bookings sync")
+
+        val configs = com.anugraha.stays.domain.model.ICalConfig.getDefaultConfigs()
+        val (result, sourceStatuses) = iCalSyncRepository.syncICalFeedsDetailed(configs)
+
+        // Determine which sources failed
+        val failedSources = sourceStatuses
+            .filter { !it.isSuccess }
+            .map { it.source }
+
+        // Create failure message
+        val failureMessage = when {
+            failedSources.isEmpty() -> null
+            failedSources.size == 1 -> "${failedSources.first().getDisplayName()} failed"
+            failedSources.size == 2 -> {
+                "${failedSources[0].getDisplayName()} and ${failedSources[1].getDisplayName()} failed"
+            }
+            else -> "Multiple external sources failed"
+        }
+
+        when (result) {
+            is NetworkResult.Success -> {
+                android.util.Log.d("CalendarViewModel", "✅ External sync completed: ${result.data.size} bookings")
+                _state.update {
+                    it.copy(
+                        failedSources = failedSources,
+                        syncFailureMessage = failureMessage
+                    )
+                }
+
+                // Reload bookings to include external ones
+                loadBookings()
+            }
+            is NetworkResult.Error -> {
+                android.util.Log.e("CalendarViewModel", "❌ External sync failed: ${result.message}")
+                _state.update {
+                    it.copy(error = result.message)
+                }
+            }
+            NetworkResult.Loading -> {}
         }
     }
 
@@ -173,8 +235,8 @@ class CalendarViewModel @Inject constructor(
                     kotlinx.coroutines.delay(500)
                     // Refresh calendar data
                     android.util.Log.d("CalendarViewModel", "Refreshing calendar data...")
-                    loadMonth(_state.value.currentMonth)
-                    loadBookings()
+                    launch { loadMonth(_state.value.currentMonth) }
+                    launch { loadBookings() }
                     android.util.Log.d("CalendarViewModel", "========== BLOCK DATE COMPLETED ==========")
                 }
                 is NetworkResult.Error -> {
@@ -220,8 +282,8 @@ class CalendarViewModel @Inject constructor(
                     kotlinx.coroutines.delay(500)
                     // Refresh calendar data
                     android.util.Log.d("CalendarViewModel", "Refreshing calendar data...")
-                    loadMonth(_state.value.currentMonth)
-                    loadBookings()
+                    launch { loadMonth(_state.value.currentMonth) }
+                    launch { loadBookings() }
                     android.util.Log.d("CalendarViewModel", "========== OPEN DATE COMPLETED ==========")
                 }
                 is NetworkResult.Error -> {
@@ -268,8 +330,8 @@ class CalendarViewModel @Inject constructor(
                     kotlinx.coroutines.delay(500)
                     // Refresh calendar data
                     android.util.Log.d("CalendarViewModel", "Refreshing calendar data...")
-                    loadMonth(_state.value.currentMonth)
-                    loadBookings()
+                    launch { loadMonth(_state.value.currentMonth) }
+                    launch { loadBookings() }
                     android.util.Log.d("CalendarViewModel", "========== CANCEL BOOKING COMPLETED ==========")
                 }
                 is NetworkResult.Error -> {

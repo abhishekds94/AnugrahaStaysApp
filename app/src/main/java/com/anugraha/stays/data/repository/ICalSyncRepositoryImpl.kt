@@ -23,6 +23,11 @@ class ICalSyncRepositoryImpl @Inject constructor(
 ) : ICalSyncRepository {
 
     override suspend fun syncICalFeeds(configs: List<ICalConfig>): NetworkResult<List<Reservation>> {
+        val (result, _) = syncICalFeedsDetailed(configs)
+        return result
+    }
+
+    override suspend fun syncICalFeedsDetailed(configs: List<ICalConfig>): Pair<NetworkResult<List<Reservation>>, List<com.anugraha.stays.domain.repository.SourceSyncStatus>> {
         return withContext(Dispatchers.IO) {
             try {
                 Log.d("ICalSync", "═══════════════════════════════════════════")
@@ -30,6 +35,7 @@ class ICalSyncRepositoryImpl @Inject constructor(
                 Log.d("ICalSync", "═══════════════════════════════════════════")
 
                 val allReservations = mutableListOf<Reservation>()
+                val sourceStatuses = mutableListOf<com.anugraha.stays.domain.repository.SourceSyncStatus>()
                 var successCount = 0
                 var failureCount = 0
 
@@ -38,8 +44,7 @@ class ICalSyncRepositoryImpl @Inject constructor(
                         Log.d("ICalSync", "📥 Syncing ${config.source.name}")
                         Log.d("ICalSync", "   URL: ${config.url}")
 
-                        // ✅ ADD TIMEOUT
-                        val icalContent = withTimeout(30000L) {  // 30 second timeout
+                        val icalContent = withTimeout(30000L) {
                             fetchICalContent(config.url)
                         }
 
@@ -67,25 +72,64 @@ class ICalSyncRepositoryImpl @Inject constructor(
                         allReservations.addAll(reservations)
                         successCount++
 
+                        sourceStatuses.add(
+                            com.anugraha.stays.domain.repository.SourceSyncStatus(
+                                source = config.source,
+                                isSuccess = true
+                            )
+                        )
+
                         Log.d("ICalSync", "   ✅ Successfully synced ${config.source.name}")
 
                     } catch (e: TimeoutCancellationException) {
                         failureCount++
+                        sourceStatuses.add(
+                            com.anugraha.stays.domain.repository.SourceSyncStatus(
+                                source = config.source,
+                                isSuccess = false,
+                                errorMessage = "Timeout - server did not respond"
+                            )
+                        )
                         Log.e("ICalSync", "   ⏱️ Timeout syncing ${config.source.name} - skipping")
                     } catch (e: javax.net.ssl.SSLHandshakeException) {
                         failureCount++
+                        sourceStatuses.add(
+                            com.anugraha.stays.domain.repository.SourceSyncStatus(
+                                source = config.source,
+                                isSuccess = false,
+                                errorMessage = "SSL certificate error"
+                            )
+                        )
                         Log.e("ICalSync", "   🔒 SSL error syncing ${config.source.name} - skipping")
-                        Log.e("ICalSync", "   Certificate validation failed. URL may be invalid or untrusted.")
                     } catch (e: java.net.UnknownHostException) {
                         failureCount++
+                        sourceStatuses.add(
+                            com.anugraha.stays.domain.repository.SourceSyncStatus(
+                                source = config.source,
+                                isSuccess = false,
+                                errorMessage = "Network error - cannot reach server"
+                            )
+                        )
                         Log.e("ICalSync", "   🌐 Network error syncing ${config.source.name} - skipping")
-                        Log.e("ICalSync", "   Cannot reach host. Check internet connection.")
                     } catch (e: CancellationException) {
                         failureCount++
+                        sourceStatuses.add(
+                            com.anugraha.stays.domain.repository.SourceSyncStatus(
+                                source = config.source,
+                                isSuccess = false,
+                                errorMessage = "Sync cancelled"
+                            )
+                        )
                         Log.e("ICalSync", "   ❌ Sync cancelled for ${config.source.name}")
-                        // Don't rethrow CancellationException - just skip this source
                     } catch (e: Exception) {
                         failureCount++
+                        sourceStatuses.add(
+                            com.anugraha.stays.domain.repository.SourceSyncStatus(
+                                source = config.source,
+                                isSuccess = false,
+                                errorMessage = e.message ?: "Unknown error"
+                            )
+                        )
                         Log.e("ICalSync", "   ❌ Error syncing ${config.source.name}: ${e.message}", e)
                     }
                 }
@@ -98,12 +142,14 @@ class ICalSyncRepositoryImpl @Inject constructor(
                 Log.d("ICalSync", "   Total reservations: ${allReservations.size}")
                 Log.d("ICalSync", "═══════════════════════════════════════════")
 
-                // ✅ Return success even if some sources failed
-                NetworkResult.Success(allReservations)
+                Pair(NetworkResult.Success(allReservations), sourceStatuses)
 
             } catch (e: Exception) {
                 Log.e("ICalSync", "❌ FATAL ERROR: ${e.message}", e)
-                NetworkResult.Error(e.message ?: "Failed to sync")
+                Pair(
+                    NetworkResult.Error(e.message ?: "Failed to sync"),
+                    emptyList()
+                )
             }
         }
     }

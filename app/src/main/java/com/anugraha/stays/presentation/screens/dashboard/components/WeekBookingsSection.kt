@@ -17,6 +17,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.anugraha.stays.domain.model.WeekBooking
 import com.anugraha.stays.presentation.components.EmptyState
+import com.anugraha.stays.presentation.components.SectionLoadingIndicator
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
 import com.anugraha.stays.util.DateUtils
 import java.time.format.DateTimeFormatter
@@ -27,7 +28,8 @@ import java.util.*
 fun WeekBookingsSection(
     weekBookings: List<WeekBooking>,
     onBookingClick: (WeekBooking) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isLoading: Boolean = false
 ) {
     Column(modifier = modifier) {
         Text(
@@ -39,15 +41,21 @@ fun WeekBookingsSection(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (weekBookings.isEmpty()) {
-            EmptyState(message = "No upcoming bookings this week")
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                weekBookings.forEach { booking ->
-                    WeekBookingCard(
-                        booking = booking,
-                        onClick = { onBookingClick(booking) }
-                    )
+        when {
+            isLoading -> {
+                SectionLoadingIndicator(message = "Loading upcoming bookings...")
+            }
+            weekBookings.isEmpty() -> {
+                EmptyState(message = "No upcoming bookings this week")
+            }
+            else -> {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    weekBookings.forEach { booking ->
+                        WeekBookingCard(
+                            booking = booking,
+                            onClick = { onBookingClick(booking) }
+                        )
+                    }
                 }
             }
         }

@@ -13,6 +13,7 @@ import com.anugraha.stays.domain.model.Reservation
 import com.anugraha.stays.presentation.components.AnugrahaActionButton
 import com.anugraha.stays.presentation.components.AnugrahaCard
 import com.anugraha.stays.presentation.components.EmptyState
+import com.anugraha.stays.presentation.components.SectionLoadingIndicator
 import com.anugraha.stays.presentation.theme.PendingCardBackground
 import com.anugraha.stays.presentation.theme.SecondaryOrange
 import com.anugraha.stays.util.DateUtils.toDisplayFormat
@@ -23,7 +24,8 @@ fun PendingReservationsSection(
     onDetailsClick: (Reservation) -> Unit,
     onAccept: (Int) -> Unit,
     onDecline: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isLoading: Boolean = false
 ) {
     Column(modifier = modifier) {
         Text(
@@ -35,17 +37,23 @@ fun PendingReservationsSection(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (pendingReservations.isEmpty()) {
-            EmptyState(message = "No pending reservations")
-        } else {
-            pendingReservations.forEach { reservation ->
-                PendingReservationCard(
-                    reservation = reservation,
-                    onDetailsClick = { onDetailsClick(reservation) },
-                    onAccept = { onAccept(reservation.id) },
-                    onDecline = { onDecline(reservation.id) },
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
+        when {
+            isLoading -> {
+                SectionLoadingIndicator(message = "Loading pending reservations...")
+            }
+            pendingReservations.isEmpty() -> {
+                EmptyState(message = "No pending reservations")
+            }
+            else -> {
+                pendingReservations.forEach { reservation ->
+                    PendingReservationCard(
+                        reservation = reservation,
+                        onDetailsClick = { onDetailsClick(reservation) },
+                        onAccept = { onAccept(reservation.id) },
+                        onDecline = { onDecline(reservation.id) },
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
             }
         }
     }

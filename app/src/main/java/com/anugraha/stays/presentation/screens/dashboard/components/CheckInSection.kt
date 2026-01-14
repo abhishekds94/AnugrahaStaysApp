@@ -11,13 +11,15 @@ import androidx.compose.ui.unit.dp
 import com.anugraha.stays.domain.model.CheckIn
 import com.anugraha.stays.presentation.components.BookingCard
 import com.anugraha.stays.presentation.components.EmptyState
+import com.anugraha.stays.presentation.components.SectionLoadingIndicator
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
 
 @Composable
 fun CheckInSection(
     checkIns: List<CheckIn>,
     onBookingClick: (CheckIn) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isLoading: Boolean = false
 ) {
     Column(modifier = modifier) {
         Text(
@@ -29,16 +31,21 @@ fun CheckInSection(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (checkIns.isEmpty()) {
-            EmptyState(message = "No bookings today")
-        } else {
-            checkIns.forEach { checkIn ->
-                // UPDATED: Pass reservation object and onClick
-                BookingCard(
-                    reservation = checkIn.reservation,
-                    onClick = { onBookingClick(checkIn) },
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
+        when {
+            isLoading -> {
+                SectionLoadingIndicator(message = "Loading check-ins...")
+            }
+            checkIns.isEmpty() -> {
+                EmptyState(message = "No bookings today")
+            }
+            else -> {
+                checkIns.forEach { checkIn ->
+                    BookingCard(
+                        reservation = checkIn.reservation,
+                        onClick = { onBookingClick(checkIn) },
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
             }
         }
     }
@@ -51,6 +58,18 @@ private fun CheckInSectionPreview() {
         CheckInSection(
             checkIns = emptyList(),
             onBookingClick = {}
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun CheckInSectionLoadingPreview() {
+    AnugrahaStaysTheme {
+        CheckInSection(
+            checkIns = emptyList(),
+            onBookingClick = {},
+            isLoading = true
         )
     }
 }
