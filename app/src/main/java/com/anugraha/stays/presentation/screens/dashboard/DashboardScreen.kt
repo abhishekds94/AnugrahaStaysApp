@@ -1,5 +1,6 @@
 package com.anugraha.stays.presentation.screens.dashboard
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -27,6 +29,7 @@ import com.anugraha.stays.presentation.screens.dashboard.components.WeekBookings
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,6 +38,14 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        viewModel.toastMessage.collectLatest { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -49,14 +60,6 @@ fun DashboardScreen(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Force re-sync"
                         )
-                    }
-
-                    // Your existing actions...
-                    IconButton(onClick = { /* notifications */ }) {
-                        Icon(Icons.Default.Notifications, contentDescription = "Notifications")
-                    }
-                    IconButton(onClick = { /* profile */ }) {
-                        Icon(Icons.Default.Person, contentDescription = "Profile")
                     }
                 }
             )

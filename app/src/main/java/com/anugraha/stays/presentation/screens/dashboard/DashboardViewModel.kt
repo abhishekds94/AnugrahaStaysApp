@@ -1,6 +1,7 @@
 package com.anugraha.stays.presentation.screens.dashboard
 
 import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.anugraha.stays.domain.usecase.dashboard.GetPendingReservationsUseCase
@@ -12,8 +13,11 @@ import com.anugraha.stays.domain.usecase.reservation.AcceptReservationUseCase
 import com.anugraha.stays.domain.usecase.reservation.DeclineReservationUseCase
 import com.anugraha.stays.util.NetworkResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -32,6 +36,8 @@ class DashboardViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(DashboardState())
     val state: StateFlow<DashboardState> = _state.asStateFlow()
+    private val _toastMessage = MutableSharedFlow<String>()
+    val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
 
     init {
         handleIntent(DashboardIntent.LoadData)
@@ -48,7 +54,6 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    // ADD THIS FUNCTION
     private fun syncExternalBookings() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
@@ -234,6 +239,7 @@ class DashboardViewModel @Inject constructor(
                 is NetworkResult.Success -> {
                     Log.d("DashboardVM", "✅ Re-sync complete: ${result.data.size} bookings")
                     loadData() // Refresh UI
+                    _toastMessage.emit("Bookings data updated!")
                 }
                 is NetworkResult.Error -> {
                     Log.e("DashboardVM", "❌ Re-sync failed: ${result.message}")
