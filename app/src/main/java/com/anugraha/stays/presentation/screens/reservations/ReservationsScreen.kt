@@ -25,7 +25,6 @@ import com.anugraha.stays.presentation.components.LoadingScreen
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
 import com.anugraha.stays.util.DateUtils.toDisplayFormat
 
-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReservationsScreen(
@@ -126,11 +125,12 @@ fun ReservationsScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
+                        .padding(paddingValues)
                         .background(MaterialTheme.colorScheme.background),
                     contentPadding = PaddingValues(
                         start = 16.dp,
                         end = 16.dp,
-                        top = 16.dp,
+                        top = 10.dp,
                         bottom = 120.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
