@@ -277,15 +277,15 @@ private fun CalendarGrid(
                                 } else if (dayCounter <= daysInMonth) {
                                     val date = currentMonth.atDay(dayCounter)
                                     val isSelected = date == selectedDate
+                                    val bookingType = getBookingTypeForDate(date, reservations, availabilities)
 
                                     // Check if date has bookings with specific statuses only
                                     val hasBooking = reservations.any { reservation ->
-                                        // Only highlight if status is approved, checkout, completed, or blocked
+                                        // Only highlight if status is approved, checkout, or completed
                                         val isValidStatus = when (reservation.status) {
                                             com.anugraha.stays.domain.model.ReservationStatus.APPROVED,
                                             com.anugraha.stays.domain.model.ReservationStatus.CHECKOUT,
-                                            com.anugraha.stays.domain.model.ReservationStatus.COMPLETED,
-                                            com.anugraha.stays.domain.model.ReservationStatus.BLOCKED -> true
+                                            com.anugraha.stays.domain.model.ReservationStatus.COMPLETED -> true
                                             else -> false
                                         }
 
@@ -297,15 +297,10 @@ private fun CalendarGrid(
                                                 )
                                     }
 
-                                    // Check if date is blocked (from availability API)
-                                    val availability = availabilities.find { it.date == date }
-                                    val isBlocked = availability?.isBlockedByAdmin() ?: false
-
                                     CalendarDay(
                                         day = dayCounter,
                                         isSelected = isSelected,
-                                        hasBooking = hasBooking,
-                                        isBlocked = isBlocked,
+                                        bookingType = bookingType,
                                         onClick = { onDateSelected(date) }
                                     )
                                     dayCounter++
@@ -319,12 +314,76 @@ private fun CalendarGrid(
     }
 }
 
+private fun getBookingTypeForDate(
+    date: LocalDate,
+    reservations: List<Reservation>,
+    availabilities: List<com.anugraha.stays.domain.model.Availability>
+): BookingType {
+    // ✅ PRIORITY 1: Check if blocked by admin FIRST
+    val availability = availabilities.find { it.date == date }
+    if (availability?.isBlockedByAdmin() == true) {
+        return BookingType.BLOCKED
+    }
+
+    // ✅ PRIORITY 2: Check for Direct/Website bookings
+    val directBooking = reservations.firstOrNull { res ->
+        val isValidStatus = when (res.status) {
+            com.anugraha.stays.domain.model.ReservationStatus.APPROVED,
+            com.anugraha.stays.domain.model.ReservationStatus.CHECKOUT,
+            com.anugraha.stays.domain.model.ReservationStatus.COMPLETED -> true
+            else -> false
+        }
+
+        val isDirect = res.bookingSource == com.anugraha.stays.domain.model.BookingSource.DIRECT ||
+                res.bookingSource == com.anugraha.stays.domain.model.BookingSource.WEBSITE
+
+        // Exclude checkout date from highlighting
+        isValidStatus && isDirect && (
+                date.isEqual(res.checkInDate) ||
+                        (date.isAfter(res.checkInDate) && date.isBefore(res.checkOutDate))
+                )
+    }
+
+    if (directBooking != null) {
+        return BookingType.DIRECT_OR_WEBSITE
+    }
+
+    // ✅ PRIORITY 3: Check for Airbnb/Booking.com bookings (only if no direct booking or block)
+    val externalBooking = reservations.firstOrNull { res ->
+        val isValidStatus = when (res.status) {
+            com.anugraha.stays.domain.model.ReservationStatus.APPROVED,
+            com.anugraha.stays.domain.model.ReservationStatus.CHECKOUT,
+            com.anugraha.stays.domain.model.ReservationStatus.COMPLETED -> true
+            else -> false
+        }
+
+        val isExternal = res.bookingSource == com.anugraha.stays.domain.model.BookingSource.AIRBNB ||
+                res.bookingSource == com.anugraha.stays.domain.model.BookingSource.BOOKING_COM
+
+        // Exclude checkout date from highlighting
+        isValidStatus && isExternal && (
+                date.isEqual(res.checkInDate) ||
+                        (date.isAfter(res.checkInDate) && date.isBefore(res.checkOutDate))
+                )
+    }
+
+    if (externalBooking != null) {
+        return when (externalBooking.bookingSource) {
+            com.anugraha.stays.domain.model.BookingSource.AIRBNB -> BookingType.AIRBNB
+            com.anugraha.stays.domain.model.BookingSource.BOOKING_COM -> BookingType.BOOKING_COM
+            else -> BookingType.NONE
+        }
+    }
+
+    return BookingType.NONE
+}
+
+
 @Composable
 private fun CalendarDay(
     day: Int,
     isSelected: Boolean,
-    hasBooking: Boolean,
-    isBlocked: Boolean,
+    bookingType: BookingType,
     onClick: () -> Unit
 ) {
     Box(
@@ -334,9 +393,13 @@ private fun CalendarDay(
             .background(
                 when {
                     isSelected -> MaterialTheme.colorScheme.primary
-                    isBlocked -> MaterialTheme.colorScheme.error.copy(alpha = 0.2f)
-                    hasBooking -> MaterialTheme.colorScheme.primaryContainer
-                    else -> Color.Transparent
+                    else -> when (bookingType) {
+                        BookingType.DIRECT_OR_WEBSITE -> Color(0xFF2196F3).copy(alpha = 0.3f) // Blue
+                        BookingType.AIRBNB -> Color(0xFFFF5A5F).copy(alpha = 0.3f)  // Airbnb Red
+                        BookingType.BOOKING_COM -> Color(0xFF003580).copy(alpha = 0.3f) // Booking.com Blue
+                        BookingType.BLOCKED -> Color(0xFF9E9E9E).copy(alpha = 0.3f)  // Gray
+                        BookingType.NONE -> Color.Transparent
+                    }
                 }
             )
             .clickable(onClick = onClick),
@@ -347,10 +410,10 @@ private fun CalendarDay(
             style = MaterialTheme.typography.bodyMedium,
             color = when {
                 isSelected -> MaterialTheme.colorScheme.onPrimary
-                isBlocked -> MaterialTheme.colorScheme.error
+                bookingType == BookingType.BLOCKED -> Color(0xFF9E9E9E)
                 else -> MaterialTheme.colorScheme.onSurface
             },
-            fontWeight = if (isSelected || hasBooking || isBlocked) FontWeight.Bold else FontWeight.Normal
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
         )
     }
 }
@@ -363,36 +426,94 @@ private fun BookingsCard(
     onBookingClick: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Only show valid statuses (not PENDING, CANCELLED, ADMIN_CANCELLED)
     val validStatuses = listOf(
         com.anugraha.stays.domain.model.ReservationStatus.APPROVED,
         com.anugraha.stays.domain.model.ReservationStatus.CHECKOUT,
-        com.anugraha.stays.domain.model.ReservationStatus.COMPLETED,
-        com.anugraha.stays.domain.model.ReservationStatus.BLOCKED
+        com.anugraha.stays.domain.model.ReservationStatus.COMPLETED
     )
 
-    val checkOuts = reservations.filter {
-        it.checkOutDate == date && it.status in validStatuses
-    }
-    val checkIns = reservations.filter {
-        it.checkInDate == date && it.status in validStatuses
-    }
-
+    // ✅ PRIORITY 1: Check if admin blocked
     val availability = availabilities.find { it.date == date }
     val isBlocked = availability?.isBlockedByAdmin() ?: false
 
+    // ✅ PRIORITY 2: Filter Direct/Website bookings first
+    val directCheckIns = reservations.filter {
+        it.checkInDate == date &&
+                it.status in validStatuses &&
+                (it.bookingSource == com.anugraha.stays.domain.model.BookingSource.DIRECT ||
+                        it.bookingSource == com.anugraha.stays.domain.model.BookingSource.WEBSITE)
+    }
+
+    val directCheckOuts = reservations.filter {
+        it.checkOutDate == date &&
+                it.status in validStatuses &&
+                (it.bookingSource == com.anugraha.stays.domain.model.BookingSource.DIRECT ||
+                        it.bookingSource == com.anugraha.stays.domain.model.BookingSource.WEBSITE)
+    }
+
+    val directContinued = reservations.filter { reservation ->
+        reservation.status in validStatuses &&
+                (reservation.bookingSource == com.anugraha.stays.domain.model.BookingSource.DIRECT ||
+                        reservation.bookingSource == com.anugraha.stays.domain.model.BookingSource.WEBSITE) &&
+                date.isAfter(reservation.checkInDate) &&
+                date.isBefore(reservation.checkOutDate)
+    }
+
+    // ✅ PRIORITY 3: Only show external bookings if no direct bookings and not blocked
+    val hasDirectBookings = directCheckIns.isNotEmpty() ||
+            directCheckOuts.isNotEmpty() ||
+            directContinued.isNotEmpty()
+
+    val externalCheckIns = if (!hasDirectBookings && !isBlocked) {
+        reservations.filter {
+            it.checkInDate == date &&
+                    it.status in validStatuses &&
+                    (it.bookingSource == com.anugraha.stays.domain.model.BookingSource.AIRBNB ||
+                            it.bookingSource == com.anugraha.stays.domain.model.BookingSource.BOOKING_COM)
+        }
+    } else emptyList()
+
+    val externalCheckOuts = if (!hasDirectBookings && !isBlocked) {
+        reservations.filter {
+            it.checkOutDate == date &&
+                    it.status in validStatuses &&
+                    (it.bookingSource == com.anugraha.stays.domain.model.BookingSource.AIRBNB ||
+                            it.bookingSource == com.anugraha.stays.domain.model.BookingSource.BOOKING_COM)
+        }
+    } else emptyList()
+
+    val externalContinued = if (!hasDirectBookings && !isBlocked) {
+        reservations.filter { reservation ->
+            reservation.status in validStatuses &&
+                    (reservation.bookingSource == com.anugraha.stays.domain.model.BookingSource.AIRBNB ||
+                            reservation.bookingSource == com.anugraha.stays.domain.model.BookingSource.BOOKING_COM) &&
+                    date.isAfter(reservation.checkInDate) &&
+                    date.isBefore(reservation.checkOutDate)
+        }
+    } else emptyList()
+
+    // Combine with priority: Direct first, then external
+    val checkIns = directCheckIns + externalCheckIns
+    val checkOuts = directCheckOuts + externalCheckOuts
+    val continuedStays = directContinued + externalContinued
+
+    // Debug logging
+    android.util.Log.d("BookingsCard", "========================================")
+    android.util.Log.d("BookingsCard", "Date: $date")
+    android.util.Log.d("BookingsCard", "Blocked: $isBlocked")
+    android.util.Log.d("BookingsCard", "Direct check-ins: ${directCheckIns.size}, check-outs: ${directCheckOuts.size}, continued: ${directContinued.size}")
+    android.util.Log.d("BookingsCard", "External check-ins: ${externalCheckIns.size}, check-outs: ${externalCheckOuts.size}, continued: ${externalContinued.size}")
+    android.util.Log.d("BookingsCard", "Final - check-ins: ${checkIns.size}, check-outs: ${checkOuts.size}, continued: ${continuedStays.size}")
+
     Card(
-        modifier = modifier
-            .height(160.dp), // Reduced height for compact design
+        modifier = modifier,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
+            modifier = Modifier.padding(16.dp)
         ) {
             // Date header
             Row(
@@ -439,12 +560,77 @@ private fun BookingsCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .heightIn(min = 80.dp),
                 contentAlignment = Alignment.Center
             ) {
                 when {
-                    checkOuts.isEmpty() && checkIns.isEmpty() -> {
-                        // Empty state
+                    // ========== CASE 1: BOTH check-in AND check-out (side-by-side) ==========
+                    checkOuts.isNotEmpty() && checkIns.isNotEmpty() -> {
+                        android.util.Log.d("BookingsCard", "→ Showing SIDE-BY-SIDE")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Check-out side (LEFT)
+                            CompactBookingItem(
+                                reservation = checkOuts.first(),
+                                isCheckIn = false,
+                                onClick = { onBookingClick(checkOuts.first().id) },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            // Vertical divider
+                            VerticalDivider(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .width(1.dp),
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+
+                            // Check-in side (RIGHT)
+                            CompactBookingItem(
+                                reservation = checkIns.first(),
+                                isCheckIn = true,
+                                onClick = { onBookingClick(checkIns.first().id) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    // ========== CASE 2: ONLY check-in OR check-out (full width) ==========
+                    checkOuts.isNotEmpty() || checkIns.isNotEmpty() -> {
+                        android.util.Log.d("BookingsCard", "→ Showing FULL WIDTH")
+                        val reservation = checkOuts.firstOrNull() ?: checkIns.first()
+                        val isCheckIn = checkOuts.isEmpty()
+
+                        CompactBookingItem(
+                            reservation = reservation,
+                            isCheckIn = isCheckIn,
+                            onClick = { onBookingClick(reservation.id) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // ========== CASE 3: CONTINUED STAYS (middle days) ==========
+                    continuedStays.isNotEmpty() -> {
+                        android.util.Log.d("BookingsCard", "→ Showing CONTINUED STAYS")
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            continuedStays.forEach { reservation ->
+                                ContinuedStayItem(
+                                    reservation = reservation,
+                                    onClick = { onBookingClick(reservation.id) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+
+                    // ========== CASE 4: EMPTY STATE ==========
+                    else -> {
+                        android.util.Log.d("BookingsCard", "→ Showing EMPTY STATE")
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -461,49 +647,6 @@ private fun BookingsCard(
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
-                    }
-                    checkOuts.isNotEmpty() && checkIns.isNotEmpty() -> {
-                        // Both check-out and check-in (horizontal layout with divider)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Check-out side
-                            CompactBookingItem(
-                                reservation = checkOuts.first(),
-                                isCheckIn = false,
-                                onClick = { onBookingClick(checkOuts.first().id) },
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            // Vertical divider
-                            VerticalDivider(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .width(1.dp),
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                            )
-
-                            // Check-in side
-                            CompactBookingItem(
-                                reservation = checkIns.first(),
-                                isCheckIn = true,
-                                onClick = { onBookingClick(checkIns.first().id) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    else -> {
-                        // Only check-out or only check-in (full width)
-                        val reservation = checkOuts.firstOrNull() ?: checkIns.first()
-                        val isCheckIn = checkOuts.isEmpty()
-
-                        CompactBookingItem(
-                            reservation = reservation,
-                            isCheckIn = isCheckIn,
-                            onClick = { onBookingClick(reservation.id) },
-                            modifier = Modifier.fillMaxWidth()
-                        )
                     }
                 }
             }
@@ -555,6 +698,72 @@ private fun CompactBookingItem(
                 overflow = TextOverflow.Ellipsis
             )
 
+            reservation.room?.let { room ->
+                Text(
+                    text = room.title,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        // Chevron indicator
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = "View details",
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+        )
+    }
+}
+
+@Composable
+private fun ContinuedStayItem(
+    reservation: Reservation,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Icon showing it's a continued stay
+        Icon(
+            imageVector = Icons.Default.MoreHoriz,
+            contentDescription = "Continued stay",
+            modifier = Modifier.size(32.dp),
+            tint = MaterialTheme.colorScheme.secondary
+        )
+
+        // Details
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Guest name with "- Continued"
+            Text(
+                text = "${reservation.primaryGuest.fullName} - Continued",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // Check-in and check-out dates
+            Text(
+                text = "Check-in: ${reservation.checkInDate.format(DateTimeFormatter.ofPattern("MMM dd"))} • Check-out: ${reservation.checkOutDate.format(DateTimeFormatter.ofPattern("MMM dd"))}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // Room name if available
             reservation.room?.let { room ->
                 Text(
                     text = room.title,

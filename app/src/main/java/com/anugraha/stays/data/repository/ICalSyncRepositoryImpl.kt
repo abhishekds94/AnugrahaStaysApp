@@ -9,10 +9,13 @@ import com.anugraha.stays.domain.model.*
 import com.anugraha.stays.domain.repository.ICalSyncRepository
 import com.anugraha.stays.util.NetworkResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.net.HttpURLConnection
 import java.net.URL
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 
 class ICalSyncRepositoryImpl @Inject constructor(
     private val parser: ICalParser,
@@ -27,21 +30,26 @@ class ICalSyncRepositoryImpl @Inject constructor(
                 Log.d("ICalSync", "═══════════════════════════════════════════")
 
                 val allReservations = mutableListOf<Reservation>()
+                var successCount = 0
+                var failureCount = 0
 
                 configs.forEach { config ->
                     try {
                         Log.d("ICalSync", "📥 Syncing ${config.source.name}")
+                        Log.d("ICalSync", "   URL: ${config.url}")
 
-                        val icalContent = fetchICalContent(config.url)
-                        val events = parser.parseICalString(icalContent, config.source)
-                        Log.d("ICalSync", "✅ Parsed ${events.size} events from ${config.source.name}")
-
-                        // Convert to reservations
-                        val reservations = events.map { event ->
-                            createReservationFromEvent(event)
+                        // ✅ ADD TIMEOUT
+                        val icalContent = withTimeout(30000L) {  // 30 second timeout
+                            fetchICalContent(config.url)
                         }
 
-                        // Save to database
+                        Log.d("ICalSync", "   ✅ Fetched iCal content (${icalContent.length} bytes)")
+
+                        val events = parser.parseICalString(icalContent, config.source)
+                        Log.d("ICalSync", "   ✅ Parsed ${events.size} events from ${config.source.name}")
+
+                        val reservations = events.map { createReservationFromEvent(it) }
+
                         val entities = events.map { event ->
                             ExternalBookingEntity(
                                 uid = event.uid,
@@ -57,19 +65,42 @@ class ICalSyncRepositoryImpl @Inject constructor(
                         externalBookingDao.insertAll(entities)
 
                         allReservations.addAll(reservations)
+                        successCount++
 
-                        Log.d("ICalSync", "✅ Saved ${entities.size} bookings from ${config.source.name}")
+                        Log.d("ICalSync", "   ✅ Successfully synced ${config.source.name}")
 
+                    } catch (e: TimeoutCancellationException) {
+                        failureCount++
+                        Log.e("ICalSync", "   ⏱️ Timeout syncing ${config.source.name} - skipping")
+                    } catch (e: javax.net.ssl.SSLHandshakeException) {
+                        failureCount++
+                        Log.e("ICalSync", "   🔒 SSL error syncing ${config.source.name} - skipping")
+                        Log.e("ICalSync", "   Certificate validation failed. URL may be invalid or untrusted.")
+                    } catch (e: java.net.UnknownHostException) {
+                        failureCount++
+                        Log.e("ICalSync", "   🌐 Network error syncing ${config.source.name} - skipping")
+                        Log.e("ICalSync", "   Cannot reach host. Check internet connection.")
+                    } catch (e: CancellationException) {
+                        failureCount++
+                        Log.e("ICalSync", "   ❌ Sync cancelled for ${config.source.name}")
+                        // Don't rethrow CancellationException - just skip this source
                     } catch (e: Exception) {
-                        Log.e("ICalSync", "❌ Error syncing ${config.source.name}: ${e.message}", e)
+                        failureCount++
+                        Log.e("ICalSync", "   ❌ Error syncing ${config.source.name}: ${e.message}", e)
                     }
                 }
 
+                Log.d("ICalSync", "")
                 Log.d("ICalSync", "═══════════════════════════════════════════")
-                Log.d("ICalSync", "✅ SYNC COMPLETE: ${allReservations.size} bookings")
+                Log.d("ICalSync", "✅ SYNC COMPLETE")
+                Log.d("ICalSync", "   Success: $successCount source(s)")
+                Log.d("ICalSync", "   Failed: $failureCount source(s)")
+                Log.d("ICalSync", "   Total reservations: ${allReservations.size}")
                 Log.d("ICalSync", "═══════════════════════════════════════════")
 
+                // ✅ Return success even if some sources failed
                 NetworkResult.Success(allReservations)
+
             } catch (e: Exception) {
                 Log.e("ICalSync", "❌ FATAL ERROR: ${e.message}", e)
                 NetworkResult.Error(e.message ?: "Failed to sync")
