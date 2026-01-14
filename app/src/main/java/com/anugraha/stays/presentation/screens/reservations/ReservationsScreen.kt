@@ -1,5 +1,6 @@
 package com.anugraha.stays.presentation.screens.reservations
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +25,7 @@ import com.anugraha.stays.presentation.components.LoadingScreen
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
 import com.anugraha.stays.util.DateUtils.toDisplayFormat
 
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReservationsScreen(
@@ -110,6 +112,7 @@ fun ReservationsScreen(
                 message = state.error ?: "Unknown error",
                 onRetry = { viewModel.handleIntent(ReservationsIntent.LoadReservations) }
             )
+
             state.filteredReservations.isEmpty() -> {
                 EmptyState(
                     message = if (state.searchQuery.isEmpty())
@@ -118,13 +121,18 @@ fun ReservationsScreen(
                         "No results for \"${state.searchQuery}\""
                 )
             }
+
             else -> {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background)
-                        .padding(paddingValues),
-                    contentPadding = PaddingValues(16.dp),
+                        .background(MaterialTheme.colorScheme.background),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 16.dp,
+                        bottom = 120.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(state.filteredReservations) { reservation ->

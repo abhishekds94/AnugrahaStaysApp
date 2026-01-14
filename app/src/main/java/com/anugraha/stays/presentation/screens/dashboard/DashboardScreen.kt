@@ -66,12 +66,14 @@ fun DashboardScreen(
             state.isLoading && !state.isRefreshing -> {
                 LoadingScreen()
             }
+
             state.error != null && state.todayCheckIns.isEmpty() -> {
                 ErrorScreen(
                     message = state.error ?: "Unknown error",
                     onRetry = { viewModel.handleIntent(DashboardIntent.LoadData) }
                 )
             }
+
             else -> {
                 DashboardContent(
                     state = state,
@@ -110,7 +112,12 @@ private fun DashboardContent(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 16.dp,
+                bottom = 80.dp  // Add extra padding at bottom for navbar
+            ),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             item {
@@ -146,8 +153,6 @@ private fun DashboardContent(
                     isLoading = state.isLoadingPendingReservations
                 )
             }
-
-            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
     }
 }
