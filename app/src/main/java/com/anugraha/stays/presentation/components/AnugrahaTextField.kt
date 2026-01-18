@@ -98,8 +98,6 @@ fun AnugrahaPasswordTextField(
     isError: Boolean = false,
     errorMessage: String? = null
 ) {
-    var passwordVisible by remember { mutableStateOf(false) }
-
     AnugrahaTextField(
         value = value,
         onValueChange = onValueChange,
@@ -109,15 +107,6 @@ fun AnugrahaPasswordTextField(
         isError = isError,
         errorMessage = errorMessage,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        trailingIcon = {
-            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                Icon(
-                    imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
-                )
-            }
-        },
-//        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation()
     )
 }
 

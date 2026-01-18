@@ -85,15 +85,6 @@ private fun LoginContent(
             color = MaterialTheme.colorScheme.primary
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Subtitle
-        Text(
-            text = "Welcome back, please log in.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-        )
-
         Spacer(modifier = Modifier.height(48.dp))
 
         // Email Field
@@ -117,23 +108,7 @@ private fun LoginContent(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Forgot Password
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = { /* TODO */ }) {
-                Text(
-                    text = "Forgot Password?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(48.dp))
 
         // Error Message
         state.error?.let { error ->
@@ -152,25 +127,6 @@ private fun LoginContent(
             isLoading = state.isLoading,
             enabled = state.email.isNotBlank() && state.password.isNotBlank()
         )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Sign Up Text
-        Row {
-            Text(
-                text = "Don't have an account? ",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-            )
-            TextButton(onClick = { /* TODO */ }) {
-                Text(
-                    text = "Sign Up",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
     }
 }
 
