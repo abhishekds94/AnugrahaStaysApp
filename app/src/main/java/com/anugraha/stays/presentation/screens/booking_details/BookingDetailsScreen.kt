@@ -187,8 +187,11 @@ private fun BookingDetailsContent(
                         value = room.title
                     )
 
-                    val isAC = room.title.contains("A/C", ignoreCase = true) ||
-                            room.title.contains("Air", ignoreCase = true)
+                    // Check room.data.airConditioned first, then fallback to title check
+                    val isAC = room.data?.airConditioned ?: run {
+                        room.title.contains("A/C", ignoreCase = true) ||
+                                room.title.contains("Air", ignoreCase = true)
+                    }
                     DetailRow(
                         icon = Icons.Default.AcUnit,
                         label = "Air Conditioned",

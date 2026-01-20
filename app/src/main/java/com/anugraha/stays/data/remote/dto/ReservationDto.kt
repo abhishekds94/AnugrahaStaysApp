@@ -6,6 +6,7 @@ import com.anugraha.stays.domain.model.Reservation
 import com.anugraha.stays.domain.model.ReservationStatus
 import com.anugraha.stays.domain.model.Guest
 import com.anugraha.stays.domain.model.Room
+import com.anugraha.stays.domain.model.RoomData
 import com.anugraha.stays.util.DateUtils
 import com.google.gson.annotations.SerializedName
 import java.time.LocalDate
@@ -119,7 +120,9 @@ fun ReservationDto.toDomain(): Reservation? {
                     1 -> "A/C Room"
                     0 -> "Non A/C Room"
                     else -> "Standard Room"
-                }
+                },
+                description = null,
+                data = RoomData(airConditioned = acRoom == 1)
             )
         }
 
