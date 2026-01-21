@@ -32,7 +32,7 @@ data class ICalConfig(
                 ),
                 ICalConfig(
                     source = ICalSource.BOOKING_COM,
-                    url = "https://ical.booking.com/v1/export?t=8c1ef0e6-e974-4345-827e-6bc8cf58ed6f"
+                    url = "https://ical.booking.com/v1/export?t=285122a3-ec48-4e9b-a347-076322cfe581"
                 )
             )
         }

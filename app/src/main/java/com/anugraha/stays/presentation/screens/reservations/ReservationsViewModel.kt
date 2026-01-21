@@ -113,16 +113,14 @@ class ReservationsViewModel @Inject constructor(
             )
         }
 
-        // Auto-expand current and next month
-        val currentMonth = YearMonth.now()
-        val nextMonth = currentMonth.plusMonths(1)
-        val autoExpanded = setOf(currentMonth, nextMonth)
+        // Start with ALL months collapsed (empty set)
+        val expandedMonths = emptySet<YearMonth>()
 
         _state.update {
             it.copy(
                 filteredReservations = sortedReservations,
                 groupedReservations = grouped,
-                expandedMonths = autoExpanded
+                expandedMonths = expandedMonths  // All collapsed by default
             )
         }
 
@@ -154,7 +152,7 @@ class ReservationsViewModel @Inject constructor(
                         )
                     }
 
-                    // Expand all months when searching
+                    // Expand all months when searching (to show results)
                     val expandedMonths = grouped.keys.toSet()
 
                     _state.update {
