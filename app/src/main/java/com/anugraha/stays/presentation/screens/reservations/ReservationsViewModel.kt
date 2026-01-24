@@ -169,11 +169,14 @@ class ReservationsViewModel @Inject constructor(
 
     private fun toggleMonthExpansion(month: YearMonth) {
         _state.update {
-            val newExpanded = if (it.expandedMonths.contains(month)) {
+            val isCurrentlyExpanded = it.expandedMonths.contains(month)
+
+            val newExpanded = if (isCurrentlyExpanded) {
                 it.expandedMonths - month
             } else {
-                it.expandedMonths + month
+                setOf(month)
             }
+
             it.copy(expandedMonths = newExpanded)
         }
     }
