@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun DashboardScreen(
     onNavigateToBookingDetails: (Int) -> Unit,
+    onLogout: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -60,6 +63,9 @@ fun DashboardScreen(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Force re-sync"
                         )
+                    }
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, "Logout")
                     }
                 }
             )

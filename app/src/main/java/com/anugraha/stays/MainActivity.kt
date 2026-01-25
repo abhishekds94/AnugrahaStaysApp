@@ -93,23 +93,22 @@ fun MainScreen(
         Screen.Dashboard.route,
         Screen.Reservations.route,
         Screen.Calendar.route,
-        Screen.Statements.route
+        Screen.Statements.route,
+        Screen.NewBooking.route
     )
 
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
-                BottomNavBar(
-                    navController = navController,
-                    onLogout = { viewModel.handleIntent(MainIntent.Logout) }
-                )
+                BottomNavBar(navController = navController)
             }
         }
     ) { paddingValues ->
         NavGraph(
             navController = navController,
             startDestination = Screen.Splash.route,
-            modifier = Modifier.padding(paddingValues)
+            modifier = Modifier.padding(paddingValues),
+            onLogout = { viewModel.handleIntent(MainIntent.Logout) }
         )
     }
 }

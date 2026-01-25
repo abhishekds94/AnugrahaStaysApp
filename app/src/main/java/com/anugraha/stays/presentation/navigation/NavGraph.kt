@@ -20,7 +20,8 @@ import com.anugraha.stays.presentation.screens.statements.StatementsScreen
 fun NavGraph(
     navController: NavHostController,
     startDestination: String,
-    modifier: Modifier
+    modifier: Modifier,
+    onLogout: () -> Unit
 ) {
     NavHost(
         navController = navController,
@@ -55,7 +56,8 @@ fun NavGraph(
             DashboardScreen(
                 onNavigateToBookingDetails = { reservationId ->
                     navController.navigate(Screen.BookingDetails.createRoute(reservationId))
-                }
+                },
+                onLogout = onLogout
             )
         }
 

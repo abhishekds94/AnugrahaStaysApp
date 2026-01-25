@@ -15,23 +15,22 @@ sealed class BottomNavItem(
     val label: String
 ) {
     object Dashboard : BottomNavItem(Screen.Dashboard.route, Icons.Default.Dashboard, "Dashboard")
-    object Reservations : BottomNavItem(Screen.Reservations.route, Icons.Default.CheckCircle, "Bookings") // CHANGED: "Reservations" to "Bookings"
+    object Reservations : BottomNavItem(Screen.Reservations.route, Icons.Default.CheckCircle, "Bookings")
     object Calendar : BottomNavItem(Screen.Calendar.route, Icons.Default.CalendarMonth, "Calendar")
     object Statements : BottomNavItem(Screen.Statements.route, Icons.Default.Receipt, "Statements")
-    object Settings : BottomNavItem("settings", Icons.Default.Settings, "Settings")
+    object NewBooking : BottomNavItem(Screen.NewBooking.route, Icons.Default.AddCircle, "New")
 }
 
 @Composable
 fun BottomNavBar(
-    navController: NavController,
-    onLogout: () -> Unit
+    navController: NavController
 ) {
     val items = listOf(
         BottomNavItem.Dashboard,
         BottomNavItem.Reservations,
         BottomNavItem.Calendar,
         BottomNavItem.Statements,
-        BottomNavItem.Settings
+        BottomNavItem.NewBooking
     )
 
     NavigationBar(
@@ -56,16 +55,12 @@ fun BottomNavBar(
                 },
                 selected = currentRoute == item.route,
                 onClick = {
-                    if (item == BottomNavItem.Settings) {
-                        onLogout()
-                    } else {
-                        navController.navigate(item.route) {
-                            popUpTo(Screen.Dashboard.route) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
+                    navController.navigate(item.route) {
+                        popUpTo(Screen.Dashboard.route) {
+                            saveState = true
                         }
+                        launchSingleTop = true
+                        restoreState = true
                     }
                 },
                 colors = NavigationBarItemDefaults.colors(
