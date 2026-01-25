@@ -1,5 +1,6 @@
 package com.anugraha.stays.presentation.screens.login
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -9,10 +10,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.anugraha.stays.R
 import com.anugraha.stays.presentation.components.AnugrahaPasswordTextField
 import com.anugraha.stays.presentation.components.AnugrahaPrimaryButton
 import com.anugraha.stays.presentation.components.AnugrahaTextField
@@ -70,22 +73,14 @@ private fun LoginContent(
     ) {
         Spacer(modifier = Modifier.height(80.dp))
 
-        Box(
+        Image(
+            painter = painterResource(id = R.drawable.anugrahastays),
             modifier = Modifier
-                .size(100.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = MaterialTheme.shapes.large
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "AS",
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .height(140.dp),
+            contentDescription = null,
+        )
 
         Spacer(modifier = Modifier.height(32.dp))
 
