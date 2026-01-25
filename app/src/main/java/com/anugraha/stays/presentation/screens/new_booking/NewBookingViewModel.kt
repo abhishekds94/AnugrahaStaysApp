@@ -21,9 +21,18 @@ class NewBookingViewModel @Inject constructor(
             is NewBookingIntent.CheckInDateChanged -> updateState { it.copy(checkInDate = intent.date) }
             is NewBookingIntent.CheckOutDateChanged -> updateState { it.copy(checkOutDate = intent.date) }
             is NewBookingIntent.ArrivalTimeChanged -> updateState { it.copy(arrivalTime = intent.time) }
-            is NewBookingIntent.GuestsCountChanged -> updateState { it.copy(guestsCount = intent.count) }
+            is NewBookingIntent.GuestsCountChanged -> {
+                if (intent.count.isEmpty() || intent.count == "0") {
+                    updateState { it.copy(guestsCount = 0) }
+                } else {
+                    val count = intent.count.toIntOrNull() ?: 1
+                    updateState { it.copy(guestsCount = count.coerceAtLeast(1)) }
+                }
+            }
             is NewBookingIntent.PetToggled -> updateState { it.copy(hasPet = intent.hasPet) }
-            is NewBookingIntent.RoomIdChanged -> updateState { it.copy(roomId = intent.roomId) }
+            is NewBookingIntent.NumberOfPetsChanged -> updateState { it.copy(numberOfPets = intent.count) }
+            is NewBookingIntent.RoomTypeChanged -> updateState { it.copy(roomType = intent.roomType) }
+            is NewBookingIntent.NumberOfAcRoomsChanged -> updateState { it.copy(numberOfAcRooms = intent.count) }
             is NewBookingIntent.AmountPaidChanged -> updateState { it.copy(amountPaid = intent.amount) }
             is NewBookingIntent.TransactionIdChanged -> updateState { it.copy(transactionId = intent.id) }
             is NewBookingIntent.BookingSourceChanged -> updateState { it.copy(bookingSource = intent.source) }
@@ -44,7 +53,7 @@ class NewBookingViewModel @Inject constructor(
                 arrivalTime = currentState.arrivalTime.ifBlank { null },
                 guestsCount = currentState.guestsCount,
                 isPet = currentState.hasPet,
-                roomId = currentState.roomId,
+                roomId = 1, // Default room ID
                 amountPaid = currentState.amountPaid.toDoubleOrNull(),
                 transactionId = currentState.transactionId.ifBlank { null },
                 bookingSource = currentState.bookingSource
