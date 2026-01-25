@@ -5,7 +5,7 @@ import com.anugraha.stays.util.ViewState
 import java.time.LocalDate
 
 data class StatementState(
-    val startDate: LocalDate = LocalDate.now().minusMonths(1),
+    val startDate: LocalDate = LocalDate.now().withDayOfMonth(1),
     val endDate: LocalDate = LocalDate.now(),
     val reservations: List<Reservation> = emptyList(),
     val totalRevenue: Double = 0.0,
