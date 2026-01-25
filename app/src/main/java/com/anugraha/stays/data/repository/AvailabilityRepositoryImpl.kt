@@ -19,7 +19,6 @@ class AvailabilityRepositoryImpl @Inject constructor(
 
     override suspend fun getAvailabilityForMonth(yearMonth: YearMonth): NetworkResult<List<Availability>> {
         return try {
-            Log.d("AvailabilityRepo", "Fetching availability for $yearMonth")
             val response = api.getAvailability()
 
             if (response.isSuccessful) {
@@ -31,8 +30,6 @@ class AvailabilityRepositoryImpl @Inject constructor(
                     availability.date.year == yearMonth.year &&
                             availability.date.monthValue == yearMonth.monthValue
                 }
-
-                Log.d("AvailabilityRepo", "Filtered ${filtered.size} availability records")
                 NetworkResult.Success(filtered)
             } else {
                 Log.e("AvailabilityRepo", "Error: ${response.code()}")
@@ -67,18 +64,11 @@ class AvailabilityRepositoryImpl @Inject constructor(
         roomId: Int?
     ): NetworkResult<Unit> {
         return try {
-            android.util.Log.d("AvailabilityRepo", "========== UPDATE AVAILABILITY ==========")
-            android.util.Log.d("AvailabilityRepo", "Date: $date")
-            android.util.Log.d("AvailabilityRepo", "Status (enum): $status")
 
             // Use the top-level function to convert status
             val apiStatus = availabilityStatusToApiString(status)
 
-            android.util.Log.d("AvailabilityRepo", "Status (API): $apiStatus")
-            android.util.Log.d("AvailabilityRepo", "Room ID: $roomId")
-
             val dateRange = "$date - $date"
-            android.util.Log.d("AvailabilityRepo", "Date Range formatted: $dateRange")
 
             val request = AvailabilityUpdateRequest(
                 dateRange = dateRange,
@@ -86,18 +76,9 @@ class AvailabilityRepositoryImpl @Inject constructor(
                 roomId = roomId
             )
 
-            android.util.Log.d("AvailabilityRepo", "Request object: $request")
-            android.util.Log.d("AvailabilityRepo", "Calling API: POST /availability-calendar/update")
-
             val response = api.updateAvailability(request)
 
-            android.util.Log.d("AvailabilityRepo", "========== API RESPONSE ==========")
-            android.util.Log.d("AvailabilityRepo", "Response code: ${response.code()}")
-            android.util.Log.d("AvailabilityRepo", "Response message: ${response.message()}")
-            android.util.Log.d("AvailabilityRepo", "Is successful: ${response.isSuccessful}")
-
             val responseBody = response.body()
-            android.util.Log.d("AvailabilityRepo", "Response body: $responseBody")
 
             val errorBody = response.errorBody()?.string()
             if (errorBody != null && errorBody.isNotEmpty()) {
@@ -108,20 +89,15 @@ class AvailabilityRepositoryImpl @Inject constructor(
 
             if (response.isSuccessful) {
                 android.util.Log.d("AvailabilityRepo", "✅ Update availability SUCCESS")
-                android.util.Log.d("AvailabilityRepo", "========================================")
                 NetworkResult.Success(Unit)
             } else {
                 val errorMessage = "Failed to update availability: ${response.code()} ${response.message()} - $errorBody"
                 android.util.Log.e("AvailabilityRepo", "❌ $errorMessage")
-                android.util.Log.d("AvailabilityRepo", "========================================")
                 NetworkResult.Error(errorMessage)
             }
         } catch (e: Exception) {
-            android.util.Log.e("AvailabilityRepo", "❌ Exception in updateAvailability", e)
             android.util.Log.e("AvailabilityRepo", "Exception type: ${e.javaClass.simpleName}")
             android.util.Log.e("AvailabilityRepo", "Exception message: ${e.message}")
-            android.util.Log.e("AvailabilityRepo", "Stack trace: ${e.stackTraceToString()}")
-            android.util.Log.d("AvailabilityRepo", "========================================")
             NetworkResult.Error(e.message ?: "An error occurred")
         }
     }

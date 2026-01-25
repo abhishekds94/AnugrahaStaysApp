@@ -11,30 +11,33 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.anugraha.stays.presentation.components.AnugrahaTextField
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewBookingScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: NewBookingViewModel = hiltViewModel()
 ) {
-    var guestName by remember { mutableStateOf("") }
-    var guestEmail by remember { mutableStateOf("") }
-    var contactNumber by remember { mutableStateOf("") }
-    var checkInDate by remember { mutableStateOf("") }
-    var checkOutDate by remember { mutableStateOf("") }
-    var arrivalTime by remember { mutableStateOf("") }
-    var numberOfGuests by remember { mutableStateOf(2) }
-    var hasPet by remember { mutableStateOf(false) }
-    var amountPaid by remember { mutableStateOf("") }
-    var transactionId by remember { mutableStateOf("") }
-    var selectedSource by remember { mutableStateOf("Direct") }
+    val state by viewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(viewModel.effect) {
+        viewModel.effect.collectLatest { effect ->
+            when (effect) {
+                is NewBookingEffect.NavigateBack -> onNavigateBack()
+                is NewBookingEffect.ShowError -> snackbarHostState.showSnackbar(effect.message)
+            }
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -48,10 +51,7 @@ fun NewBookingScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, "Back")
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                }
             )
         }
     ) { paddingValues ->
@@ -64,31 +64,29 @@ fun NewBookingScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Guest Information
             SectionHeader("GUEST INFORMATION")
 
             AnugrahaTextField(
-                value = guestName,
-                onValueChange = { guestName = it },
+                value = state.guestName,
+                onValueChange = { viewModel.handleIntent(NewBookingIntent.GuestNameChanged(it)) },
                 label = "Guest Name",
                 placeholder = "Enter guest's full name"
             )
 
             AnugrahaTextField(
-                value = guestEmail,
-                onValueChange = { guestEmail = it },
+                value = state.guestEmail,
+                onValueChange = { viewModel.handleIntent(NewBookingIntent.GuestEmailChanged(it)) },
                 label = "Guest Email",
                 placeholder = "Enter guest's email"
             )
 
             AnugrahaTextField(
-                value = contactNumber,
-                onValueChange = { contactNumber = it },
+                value = state.contactNumber,
+                onValueChange = { viewModel.handleIntent(NewBookingIntent.ContactNumberChanged(it)) },
                 label = "Contact Number",
                 placeholder = "Enter contact number"
             )
 
-            // Booking Details
             SectionHeader("BOOKING DETAILS")
 
             Row(
@@ -96,31 +94,29 @@ fun NewBookingScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 AnugrahaTextField(
-                    value = checkInDate,
-                    onValueChange = { checkInDate = it },
+                    value = state.checkInDate.toString(),
+                    onValueChange = { },
                     label = "Check-in Date",
                     placeholder = "Select date",
-                    trailingIcon = {
-                        Icon(Icons.Default.CalendarToday, "Calendar")
-                    },
-                    modifier = Modifier.weight(1f)
+                    trailingIcon = { Icon(Icons.Default.CalendarToday, "Calendar") },
+                    modifier = Modifier.weight(1f),
+                    enabled = false
                 )
 
                 AnugrahaTextField(
-                    value = checkOutDate,
-                    onValueChange = { checkOutDate = it },
+                    value = state.checkOutDate.toString(),
+                    onValueChange = { },
                     label = "Check-out Date",
                     placeholder = "Select date",
-                    trailingIcon = {
-                        Icon(Icons.Default.CalendarToday, "Calendar")
-                    },
-                    modifier = Modifier.weight(1f)
+                    trailingIcon = { Icon(Icons.Default.CalendarToday, "Calendar") },
+                    modifier = Modifier.weight(1f),
+                    enabled = false
                 )
             }
 
             AnugrahaTextField(
-                value = arrivalTime,
-                onValueChange = { arrivalTime = it },
+                value = state.arrivalTime,
+                onValueChange = { viewModel.handleIntent(NewBookingIntent.ArrivalTimeChanged(it)) },
                 label = "Approx. Arrival Time",
                 placeholder = "e.g., 3:00 PM"
             )
@@ -129,51 +125,60 @@ fun NewBookingScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Number of Guests Counter (simplified for preview)
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Number of Guests", style = MaterialTheme.typography.bodyMedium)
-                    Text("$numberOfGuests", style = MaterialTheme.typography.titleLarge)
+                    Text("${state.guestsCount}", style = MaterialTheme.typography.titleLarge)
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Pet?", style = MaterialTheme.typography.bodyMedium)
                     Switch(
-                        checked = hasPet,
-                        onCheckedChange = { hasPet = it }
+                        checked = state.hasPet,
+                        onCheckedChange = { viewModel.handleIntent(NewBookingIntent.PetToggled(it)) }
                     )
                 }
             }
 
-            // Payment Details
             SectionHeader("PAYMENT DETAILS")
 
             AnugrahaTextField(
-                value = amountPaid,
-                onValueChange = { amountPaid = it },
+                value = state.amountPaid,
+                onValueChange = { viewModel.handleIntent(NewBookingIntent.AmountPaidChanged(it)) },
                 label = "Amount Paid",
                 placeholder = "Enter amount"
             )
 
             AnugrahaTextField(
-                value = transactionId,
-                onValueChange = { transactionId = it },
+                value = state.transactionId,
+                onValueChange = { viewModel.handleIntent(NewBookingIntent.TransactionIdChanged(it)) },
                 label = "Transaction ID",
                 placeholder = "Enter ID (optional)"
             )
 
-            // Booking Source
             SectionHeader("BOOKING SOURCE")
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("Direct", "Website", "Airbnb", "Booking.com").forEach { source ->
+                listOf("DIRECT", "WEBSITE", "AIRBNB", "BOOKING_COM").forEach { source ->
                     FilterChip(
-                        selected = selectedSource == source,
-                        onClick = { selectedSource = source },
+                        selected = state.bookingSource == source,
+                        onClick = { viewModel.handleIntent(NewBookingIntent.BookingSourceChanged(source)) },
                         label = { Text(source) }
                     )
+                }
+            }
+
+            Button(
+                onClick = { viewModel.handleIntent(NewBookingIntent.CreateBooking) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !state.isLoading && state.guestName.isNotBlank() && state.contactNumber.isNotBlank()
+            ) {
+                if (state.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                } else {
+                    Text("Create Booking")
                 }
             }
 

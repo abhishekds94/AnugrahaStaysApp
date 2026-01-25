@@ -34,8 +34,6 @@ fun GuestDto.toDomain(): Guest {
     val guestName = fullName ?: "Unknown Guest"
     val guestPhone = phone ?: "No Phone"
 
-    Log.d("GuestDto", "Mapping guest: $guestName, $guestPhone")
-
     return Guest(
         fullName = guestName,
         phone = guestPhone,

@@ -1,6 +1,8 @@
 package com.anugraha.stays.presentation.screens.pending_details
 
-sealed class PendingDetailsIntent {
+import com.anugraha.stays.util.ViewIntent
+
+sealed class PendingDetailsIntent : ViewIntent {
     data class LoadReservation(val reservationId: Int) : PendingDetailsIntent()
     object ShowAcceptDialog : PendingDetailsIntent()
     object ShowDeclineDialog : PendingDetailsIntent()

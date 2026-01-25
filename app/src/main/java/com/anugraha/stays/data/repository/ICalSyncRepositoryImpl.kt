@@ -1,12 +1,13 @@
 package com.anugraha.stays.data.repository
 
-import android.util.Log
 import com.anugraha.stays.data.local.database.dao.ExternalBookingDao
 import com.anugraha.stays.data.local.database.entity.ExternalBookingEntity
 import com.anugraha.stays.data.remote.ical.ICalEvent
 import com.anugraha.stays.data.remote.ical.ICalParser
 import com.anugraha.stays.domain.model.*
 import com.anugraha.stays.domain.repository.ICalSyncRepository
+import com.anugraha.stays.domain.repository.SourceSyncStatus
+import com.anugraha.stays.util.DateUtils
 import com.anugraha.stays.util.NetworkResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -27,32 +28,19 @@ class ICalSyncRepositoryImpl @Inject constructor(
         return result
     }
 
-    override suspend fun syncICalFeedsDetailed(configs: List<ICalConfig>): Pair<NetworkResult<List<Reservation>>, List<com.anugraha.stays.domain.repository.SourceSyncStatus>> {
+    override suspend fun syncICalFeedsDetailed(configs: List<ICalConfig>): Pair<NetworkResult<List<Reservation>>, List<SourceSyncStatus>> {
         return withContext(Dispatchers.IO) {
             try {
-                Log.d("ICalSync", "═══════════════════════════════════════════")
-                Log.d("ICalSync", "🔄 STARTING iCAL SYNC")
-                Log.d("ICalSync", "═══════════════════════════════════════════")
-
                 val allReservations = mutableListOf<Reservation>()
-                val sourceStatuses = mutableListOf<com.anugraha.stays.domain.repository.SourceSyncStatus>()
-                var successCount = 0
-                var failureCount = 0
+                val sourceStatuses = mutableListOf<SourceSyncStatus>()
 
                 configs.forEach { config ->
                     try {
-                        Log.d("ICalSync", "📥 Syncing ${config.source.name}")
-                        Log.d("ICalSync", "   URL: ${config.url}")
-
                         val icalContent = withTimeout(30000L) {
                             fetchICalContent(config.url)
                         }
 
-                        Log.d("ICalSync", "   ✅ Fetched iCal content (${icalContent.length} bytes)")
-
                         val events = parser.parseICalString(icalContent, config.source)
-                        Log.d("ICalSync", "   ✅ Parsed ${events.size} events from ${config.source.name}")
-
                         val reservations = events.map { createReservationFromEvent(it) }
 
                         val entities = events.map { event ->
@@ -70,86 +58,18 @@ class ICalSyncRepositoryImpl @Inject constructor(
                         externalBookingDao.insertAll(entities)
 
                         allReservations.addAll(reservations)
-                        successCount++
-
-                        sourceStatuses.add(
-                            com.anugraha.stays.domain.repository.SourceSyncStatus(
-                                source = config.source,
-                                isSuccess = true
-                            )
-                        )
-
-                        Log.d("ICalSync", "   ✅ Successfully synced ${config.source.name}")
+                        sourceStatuses.add(SourceSyncStatus(source = config.source, isSuccess = true))
 
                     } catch (e: TimeoutCancellationException) {
-                        failureCount++
-                        sourceStatuses.add(
-                            com.anugraha.stays.domain.repository.SourceSyncStatus(
-                                source = config.source,
-                                isSuccess = false,
-                                errorMessage = "Timeout - server did not respond"
-                            )
-                        )
-                        Log.e("ICalSync", "   ⏱️ Timeout syncing ${config.source.name} - skipping")
-                    } catch (e: javax.net.ssl.SSLHandshakeException) {
-                        failureCount++
-                        sourceStatuses.add(
-                            com.anugraha.stays.domain.repository.SourceSyncStatus(
-                                source = config.source,
-                                isSuccess = false,
-                                errorMessage = "SSL certificate error"
-                            )
-                        )
-                        Log.e("ICalSync", "   🔒 SSL error syncing ${config.source.name} - skipping")
-                    } catch (e: java.net.UnknownHostException) {
-                        failureCount++
-                        sourceStatuses.add(
-                            com.anugraha.stays.domain.repository.SourceSyncStatus(
-                                source = config.source,
-                                isSuccess = false,
-                                errorMessage = "Network error - cannot reach server"
-                            )
-                        )
-                        Log.e("ICalSync", "   🌐 Network error syncing ${config.source.name} - skipping")
-                    } catch (e: CancellationException) {
-                        failureCount++
-                        sourceStatuses.add(
-                            com.anugraha.stays.domain.repository.SourceSyncStatus(
-                                source = config.source,
-                                isSuccess = false,
-                                errorMessage = "Sync cancelled"
-                            )
-                        )
-                        Log.e("ICalSync", "   ❌ Sync cancelled for ${config.source.name}")
+                        sourceStatuses.add(SourceSyncStatus(source = config.source, isSuccess = false, errorMessage = "Timeout"))
                     } catch (e: Exception) {
-                        failureCount++
-                        sourceStatuses.add(
-                            com.anugraha.stays.domain.repository.SourceSyncStatus(
-                                source = config.source,
-                                isSuccess = false,
-                                errorMessage = e.message ?: "Unknown error"
-                            )
-                        )
-                        Log.e("ICalSync", "   ❌ Error syncing ${config.source.name}: ${e.message}", e)
+                        sourceStatuses.add(SourceSyncStatus(source = config.source, isSuccess = false, errorMessage = e.message ?: "Unknown error"))
                     }
                 }
 
-                Log.d("ICalSync", "")
-                Log.d("ICalSync", "═══════════════════════════════════════════")
-                Log.d("ICalSync", "✅ SYNC COMPLETE")
-                Log.d("ICalSync", "   Success: $successCount source(s)")
-                Log.d("ICalSync", "   Failed: $failureCount source(s)")
-                Log.d("ICalSync", "   Total reservations: ${allReservations.size}")
-                Log.d("ICalSync", "═══════════════════════════════════════════")
-
                 Pair(NetworkResult.Success(allReservations), sourceStatuses)
-
             } catch (e: Exception) {
-                Log.e("ICalSync", "❌ FATAL ERROR: ${e.message}", e)
-                Pair(
-                    NetworkResult.Error(e.message ?: "Failed to sync"),
-                    emptyList()
-                )
+                Pair(NetworkResult.Error(e.message ?: "Failed to sync"), emptyList())
             }
         }
     }
@@ -158,11 +78,8 @@ class ICalSyncRepositoryImpl @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val entities = externalBookingDao.getAllBookings()
-                entities.map { entity ->
-                    createReservationFromEntity(entity)
-                }
+                entities.map { createReservationFromEntity(it) }
             } catch (e: Exception) {
-                Log.e("ICalSync", "Error getting external bookings", e)
                 emptyList()
             }
         }
@@ -187,7 +104,6 @@ class ICalSyncRepositoryImpl @Inject constructor(
         }
     }
 
-    // ✅ SIMPLE: Create reservation with proper display name
     private fun createReservationFromEvent(event: ICalEvent): Reservation {
         val displayName = when (event.source) {
             ICalSource.AIRBNB -> "Booking on Airbnb"
@@ -204,11 +120,7 @@ class ICalSyncRepositoryImpl @Inject constructor(
             kids = 0,
             hasPet = false,
             totalAmount = 0.0,
-            primaryGuest = Guest(
-                fullName = displayName,  // ✅ "Booking on Airbnb" or "Booking on Booking.com"
-                phone = "",
-                email = ""
-            ),
+            primaryGuest = Guest(fullName = displayName, phone = "", email = ""),
             room = null,
             bookingSource = event.source.toBookingSource(),
             estimatedCheckInTime = null,
@@ -219,7 +131,6 @@ class ICalSyncRepositoryImpl @Inject constructor(
         )
     }
 
-    // ✅ SIMPLE: Create from database entity
     private fun createReservationFromEntity(entity: ExternalBookingEntity): Reservation {
         val source = when (entity.source) {
             "AIRBNB" -> ICalSource.AIRBNB
@@ -236,17 +147,13 @@ class ICalSyncRepositoryImpl @Inject constructor(
             id = entity.uid.hashCode(),
             reservationNumber = entity.reservationNumber,
             status = ReservationStatus.APPROVED,
-            checkInDate = com.anugraha.stays.util.DateUtils.parseDate(entity.checkInDate),
-            checkOutDate = com.anugraha.stays.util.DateUtils.parseDate(entity.checkOutDate),
+            checkInDate = DateUtils.parseDate(entity.checkInDate),
+            checkOutDate = DateUtils.parseDate(entity.checkOutDate),
             adults = 2,
             kids = 0,
             hasPet = false,
             totalAmount = 0.0,
-            primaryGuest = Guest(
-                fullName = displayName,  // ✅ "Booking on Airbnb" or "Booking on Booking.com"
-                phone = "",
-                email = ""
-            ),
+            primaryGuest = Guest(fullName = displayName, phone = "", email = ""),
             room = null,
             bookingSource = source.toBookingSource(),
             estimatedCheckInTime = null,

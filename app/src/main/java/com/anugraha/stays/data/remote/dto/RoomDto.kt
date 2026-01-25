@@ -16,7 +16,7 @@ data class RoomDto(
     val description: String? = null,
 
     @SerializedName("data")
-    val data: String? = null  // JSON string from API: "{\"air_conditioned\":false}"
+    val data: String? = null
 )
 
 fun RoomDto.toDomain() = Room(

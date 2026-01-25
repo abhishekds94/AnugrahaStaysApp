@@ -14,7 +14,6 @@ class FirebaseAuthDataSource @Inject constructor(
 ) {
     suspend fun login(email: String, password: String): NetworkResult<User> {
         return try {
-            // Check if email is in allowed list
             if (!Constants.ALLOWED_EMAILS.contains(email)) {
                 return NetworkResult.Error("Unauthorized access. Only admin users can log in.")
             }

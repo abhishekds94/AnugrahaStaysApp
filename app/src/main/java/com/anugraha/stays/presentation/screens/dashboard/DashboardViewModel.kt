@@ -1,25 +1,18 @@
 package com.anugraha.stays.presentation.screens.dashboard
 
-import android.util.Log
-import android.widget.Toast
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.anugraha.stays.domain.usecase.dashboard.GetPendingReservationsUseCase
 import com.anugraha.stays.domain.usecase.dashboard.GetTodayCheckInsUseCase
 import com.anugraha.stays.domain.usecase.dashboard.GetTodayCheckOutsUseCase
 import com.anugraha.stays.domain.usecase.dashboard.GetWeekBookingsUseCase
-import com.anugraha.stays.domain.usecase.ical.SyncICalFeedsUseCase  // ADD THIS
+import com.anugraha.stays.domain.usecase.ical.SyncICalFeedsUseCase
 import com.anugraha.stays.domain.usecase.reservation.AcceptReservationUseCase
 import com.anugraha.stays.domain.usecase.reservation.DeclineReservationUseCase
+import com.anugraha.stays.util.BaseViewModel
 import com.anugraha.stays.util.NetworkResult
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -31,23 +24,18 @@ class DashboardViewModel @Inject constructor(
     private val getPendingReservationsUseCase: GetPendingReservationsUseCase,
     private val acceptReservationUseCase: AcceptReservationUseCase,
     private val declineReservationUseCase: DeclineReservationUseCase,
-    private val syncICalFeedsUseCase: SyncICalFeedsUseCase  // ADD THIS
-) : ViewModel() {
-
-    private val _state = MutableStateFlow(DashboardState())
-    val state: StateFlow<DashboardState> = _state.asStateFlow()
-    private val _toastMessage = MutableSharedFlow<String>()
-    val toastMessage: SharedFlow<String> = _toastMessage.asSharedFlow()
+    private val syncICalFeedsUseCase: SyncICalFeedsUseCase
+) : BaseViewModel<DashboardState, DashboardIntent, DashboardEffect>(DashboardState()) {
 
     init {
         handleIntent(DashboardIntent.LoadData)
     }
 
-    fun handleIntent(intent: DashboardIntent) {
+    override fun handleIntent(intent: DashboardIntent) {
         when (intent) {
             is DashboardIntent.LoadData -> loadData()
             is DashboardIntent.RefreshData -> refreshData()
-            is DashboardIntent.SyncExternalBookings -> syncExternalBookings()  // ADD THIS
+            is DashboardIntent.SyncExternalBookings -> syncExternalBookings()
             is DashboardIntent.AcceptReservation -> acceptReservation(intent.id)
             is DashboardIntent.DeclineReservation -> declineReservation(intent.id)
             is DashboardIntent.ForceResync -> forceResync()
@@ -56,20 +44,20 @@ class DashboardViewModel @Inject constructor(
 
     private fun syncExternalBookings() {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
+            updateState { it.copy(isLoading = true, error = null) }
 
             when (val result = syncICalFeedsUseCase()) {
                 is NetworkResult.Success -> {
-                    Log.d("DashboardVM", "Synced ${result.data.size} external bookings")
-                    loadData() // Refresh dashboard to show synced bookings
+                    loadData()
                 }
                 is NetworkResult.Error -> {
-                    _state.update {
+                    updateState {
                         it.copy(
                             isLoading = false,
                             error = result.message
                         )
                     }
+                    sendEffect(DashboardEffect.ShowError(result.message ?: "Sync failed"))
                 }
                 NetworkResult.Loading -> {}
             }
@@ -78,7 +66,7 @@ class DashboardViewModel @Inject constructor(
 
     private fun loadData() {
         viewModelScope.launch {
-            _state.update {
+            updateState {
                 it.copy(
                     isLoading = true,
                     isLoadingCheckIns = true,
@@ -88,48 +76,50 @@ class DashboardViewModel @Inject constructor(
                 )
             }
 
-            launch { loadTodayCheckIns() }
-            launch { loadTodayCheckOuts() }
-            launch { loadWeekBookings() }
-            launch { loadPendingReservations() }
+            listOf(
+                async { loadTodayCheckIns() },
+                async { loadTodayCheckOuts() },
+                async { loadWeekBookings() },
+                async { loadPendingReservations() }
+            ).awaitAll()
 
-            _state.update { it.copy(isLoading = false) }
+            updateState { it.copy(isLoading = false) }
         }
     }
 
     private fun refreshData() {
         viewModelScope.launch {
-            _state.update { it.copy(isRefreshing = true, error = null) }
+            updateState { it.copy(isRefreshing = true, error = null) }
 
-            launch { loadTodayCheckIns() }
-            launch { loadTodayCheckOuts() }
-            launch { loadWeekBookings() }
-            launch { loadPendingReservations() }
+            listOf(
+                async { loadTodayCheckIns() },
+                async { loadTodayCheckOuts() },
+                async { loadWeekBookings() },
+                async { loadPendingReservations() }
+            ).awaitAll()
 
-            _state.update { it.copy(isRefreshing = false) }
+            updateState { it.copy(isRefreshing = false) }
         }
     }
 
     private suspend fun loadTodayCheckIns() {
         when (val result = getTodayCheckInsUseCase()) {
             is NetworkResult.Success -> {
-                _state.update {
+                updateState {
                     it.copy(
-                        todayCheckIns = result.data,
+                        todayCheckIns = result.data ?: emptyList(),
                         isLoadingCheckIns = false
                     )
                 }
             }
-
             is NetworkResult.Error -> {
-                _state.update {
+                updateState {
                     it.copy(
                         error = result.message,
                         isLoadingCheckIns = false
                     )
                 }
             }
-
             NetworkResult.Loading -> {}
         }
     }
@@ -137,23 +127,21 @@ class DashboardViewModel @Inject constructor(
     private suspend fun loadTodayCheckOuts() {
         when (val result = getTodayCheckOutsUseCase()) {
             is NetworkResult.Success -> {
-                _state.update {
+                updateState {
                     it.copy(
-                        todayCheckOuts = result.data,
+                        todayCheckOuts = result.data ?: emptyList(),
                         isLoadingCheckOuts = false
                     )
                 }
             }
-
             is NetworkResult.Error -> {
-                _state.update {
+                updateState {
                     it.copy(
                         error = result.message,
                         isLoadingCheckOuts = false
                     )
                 }
             }
-
             NetworkResult.Loading -> {}
         }
     }
@@ -161,23 +149,21 @@ class DashboardViewModel @Inject constructor(
     private suspend fun loadWeekBookings() {
         when (val result = getWeekBookingsUseCase()) {
             is NetworkResult.Success -> {
-                _state.update {
+                updateState {
                     it.copy(
-                        weekBookings = result.data,
+                        weekBookings = result.data ?: emptyList(),
                         isLoadingWeekBookings = false
                     )
                 }
             }
-
             is NetworkResult.Error -> {
-                _state.update {
+                updateState {
                     it.copy(
                         error = result.message,
                         isLoadingWeekBookings = false
                     )
                 }
             }
-
             NetworkResult.Loading -> {}
         }
     }
@@ -185,34 +171,35 @@ class DashboardViewModel @Inject constructor(
     private suspend fun loadPendingReservations() {
         when (val result = getPendingReservationsUseCase()) {
             is NetworkResult.Success -> {
-                _state.update {
+                updateState {
                     it.copy(
-                        pendingReservations = result.data,
+                        pendingReservations = result.data ?: emptyList(),
                         isLoadingPendingReservations = false
                     )
                 }
             }
-
             is NetworkResult.Error -> {
-                _state.update {
+                updateState {
                     it.copy(
                         error = result.message,
                         isLoadingPendingReservations = false
                     )
                 }
             }
-
             NetworkResult.Loading -> {}
         }
     }
 
     private fun acceptReservation(id: Int) {
         viewModelScope.launch {
-            when (acceptReservationUseCase(id)) {
+            when (val result = acceptReservationUseCase(id)) {
                 is NetworkResult.Success -> {
+                    sendEffect(DashboardEffect.ShowToast("Reservation accepted"))
                     refreshData()
                 }
-                is NetworkResult.Error -> {}
+                is NetworkResult.Error -> {
+                    sendEffect(DashboardEffect.ShowError(result.message ?: "Failed to accept"))
+                }
                 NetworkResult.Loading -> {}
             }
         }
@@ -220,11 +207,14 @@ class DashboardViewModel @Inject constructor(
 
     private fun declineReservation(id: Int) {
         viewModelScope.launch {
-            when (declineReservationUseCase(id)) {
+            when (val result = declineReservationUseCase(id)) {
                 is NetworkResult.Success -> {
+                    sendEffect(DashboardEffect.ShowToast("Reservation declined"))
                     refreshData()
                 }
-                is NetworkResult.Error -> {}
+                is NetworkResult.Error -> {
+                    sendEffect(DashboardEffect.ShowError(result.message ?: "Failed to decline"))
+                }
                 NetworkResult.Loading -> {}
             }
         }
@@ -232,21 +222,18 @@ class DashboardViewModel @Inject constructor(
 
     private fun forceResync() {
         viewModelScope.launch {
-            Log.d("DashboardVM", "🔄 FORCE RE-SYNC - Deleting old data...")
-
-            // Sync will delete old data and insert new
+            updateState { it.copy(isLoading = true) }
             when (val result = syncICalFeedsUseCase()) {
                 is NetworkResult.Success -> {
-                    Log.d("DashboardVM", "✅ Re-sync complete: ${result.data.size} bookings")
-                    loadData() // Refresh UI
-                    _toastMessage.emit("Bookings data updated!")
+                    loadData()
+                    sendEffect(DashboardEffect.ShowToast("Bookings data updated!"))
                 }
                 is NetworkResult.Error -> {
-                    Log.e("DashboardVM", "❌ Re-sync failed: ${result.message}")
+                    updateState { it.copy(isLoading = false) }
+                    sendEffect(DashboardEffect.ShowError(result.message ?: "Resync failed"))
                 }
                 NetworkResult.Loading -> {}
             }
         }
     }
-
 }

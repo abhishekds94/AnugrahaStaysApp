@@ -1,0 +1,7 @@
+package com.anugraha.stays.presentation.screens.booking_details
+
+import com.anugraha.stays.util.ViewEffect
+
+sealed class BookingDetailsEffect : ViewEffect {
+    data class ShowError(val message: String) : BookingDetailsEffect()
+}

@@ -28,8 +28,6 @@ class BookingRepositoryImpl @Inject constructor(
         bookingSource: String
     ): NetworkResult<Reservation> {
         return try {
-            Log.d("BookingRepo", "Creating admin booking for $guestName")
-
             val request = CreateBookingRequest(
                 guestName = guestName,
                 guestEmail = guestEmail,
@@ -52,14 +50,11 @@ class BookingRepositoryImpl @Inject constructor(
                 if (reservationDto != null) {
                     val reservation = reservationDto.toDomain()
                     if (reservation != null) {
-                        Log.d("BookingRepo", "Booking created: ${reservation.reservationNumber}")
                         NetworkResult.Success(reservation)
                     } else {
-                        Log.e("BookingRepo", "Failed to convert DTO to domain model")
                         NetworkResult.Error("Failed to parse booking response")
                     }
                 } else {
-                    Log.e("BookingRepo", "Response body is null")
                     NetworkResult.Error("Empty response from server")
                 }
             } else {

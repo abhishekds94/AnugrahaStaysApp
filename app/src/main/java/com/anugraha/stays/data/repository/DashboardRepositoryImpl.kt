@@ -1,89 +1,53 @@
 package com.anugraha.stays.data.repository
 
-import android.util.Log
 import com.anugraha.stays.data.remote.api.AnugrahaApi
+import com.anugraha.stays.data.remote.dto.ReservationDto
 import com.anugraha.stays.data.remote.dto.toDomain
 import com.anugraha.stays.domain.model.*
 import com.anugraha.stays.domain.repository.DashboardRepository
 import com.anugraha.stays.domain.repository.ICalSyncRepository
 import com.anugraha.stays.util.DateUtils
 import com.anugraha.stays.util.NetworkResult
-import java.time.LocalDate
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import java.time.LocalTime
 import javax.inject.Inject
 
 class DashboardRepositoryImpl @Inject constructor(
     private val api: AnugrahaApi,
-    private val iCalSyncRepository: ICalSyncRepository  // ADD THIS
+    private val iCalSyncRepository: ICalSyncRepository
 ) : DashboardRepository {
 
-    override suspend fun getTodayCheckIns(): NetworkResult<List<CheckIn>> {
-        return try {
-            Log.d("DashboardRepo", "Fetching today's check-ins")
+    override suspend fun getTodayCheckIns(): NetworkResult<List<CheckIn>> = coroutineScope {
+        try {
             val response = api.getTodayCheckIns()
+            if (!response.isSuccessful) return@coroutineScope NetworkResult.Error("API_ERROR_${response.code()}")
 
-            if (response.isSuccessful) {
-                val body = response.body()
-                val reservationDtos = body?.data ?: emptyList()
-                Log.d("DashboardRepo", "Found ${reservationDtos.size} check-in DTOs from API")
+            val reservationDtos = response.body()?.data ?: emptyList()
 
-                // Fetch full details for each API reservation
-                val apiCheckIns = reservationDtos.mapNotNull { incompleteDto ->
-                    try {
-                        if (incompleteDto.id == null) return@mapNotNull null
-
-                        val fullResponse = api.getReservationById(incompleteDto.id)
-                        val fullDto = if (fullResponse.isSuccessful) {
-                            fullResponse.body()
-                        } else {
-                            incompleteDto
-                        }
-
-                        fullDto?.toDomain()?.let { reservation ->
-                            CheckIn(
-                                reservation = reservation,
-                                checkInTime = fullDto.estimatedCheckInTime?.let {
-                                    try {
-                                        java.time.LocalTime.parse(it)
-                                    } catch (e: Exception) {
-                                        null
-                                    }
-                                }
-                            )
-                        }
-                    } catch (e: Exception) {
-                        incompleteDto.toDomain()?.let { CheckIn(it, null) }
-                    }
-                }
-
-                // GET EXTERNAL BOOKINGS
-                val externalBookings = iCalSyncRepository.getExternalBookings()
-                val today = DateUtils.now()
-
-                val externalCheckIns = externalBookings
-                    .filter { it.checkInDate == today }
-                    .map { CheckIn(reservation = it, checkInTime = null) }
-
-                // MERGE
-                val allCheckIns = apiCheckIns + externalCheckIns
-
-                Log.d("DashboardRepo", "Total check-ins: ${allCheckIns.size} (${apiCheckIns.size} API + ${externalCheckIns.size} external)")
-                NetworkResult.Success(allCheckIns)
-            } else {
-                val errorBody = response.errorBody()?.string()
-                Log.e("DashboardRepo", "API Error ${response.code()}: $errorBody")
-                NetworkResult.Error("Failed to fetch check-ins: ${response.message()}")
+            val apiCheckIns = reservationDtos.map { dto ->
+                async { fetchFullReservationAndMap(dto) }
+            }.awaitAll().mapNotNull { reservation ->
+                reservation?.let { CheckIn(it, it.checkInDate.atStartOfDay().toLocalTime()) }
             }
+
+            val externalBookings = iCalSyncRepository.getExternalBookings()
+            val today = DateUtils.now()
+
+            val externalCheckIns = externalBookings
+                .filter { it.checkInDate == today }
+                .map { CheckIn(reservation = it, checkInTime = null) }
+
+            NetworkResult.Success(apiCheckIns + externalCheckIns)
         } catch (e: Exception) {
-            Log.e("DashboardRepo", "Exception fetching check-ins", e)
-            NetworkResult.Error(e.message ?: "An error occurred")
+            NetworkResult.Error(e.message ?: "UNKNOWN_ERROR")
         }
     }
 
-    override suspend fun getTodayCheckOuts(): NetworkResult<List<CheckOut>> {
-        return try {
+    override suspend fun getTodayCheckOuts(): NetworkResult<List<CheckOut>> = coroutineScope {
+        try {
             val today = DateUtils.now()
-            Log.d("DashboardRepo", "Computing today's check-outs for date: $today")
-
             val response = api.getReservations(
                 status = "approved",
                 perPage = 100,
@@ -91,52 +55,28 @@ class DashboardRepositoryImpl @Inject constructor(
                 sortOrder = "asc"
             )
 
-            if (response.isSuccessful) {
-                val reservationDtos = response.body() ?: emptyList()
+            if (!response.isSuccessful) return@coroutineScope NetworkResult.Error("API_ERROR_${response.code()}")
 
-                // Fetch full details and filter for today's API check-outs
-                val apiCheckOuts = reservationDtos
-                    .mapNotNull { incompleteDto ->
-                        try {
-                            if (incompleteDto.id == null) return@mapNotNull null
-                            val fullResponse = api.getReservationById(incompleteDto.id)
-                            val fullDto = if (fullResponse.isSuccessful) {
-                                fullResponse.body()
-                            } else {
-                                incompleteDto
-                            }
-                            fullDto?.toDomain()
-                        } catch (e: Exception) {
-                            incompleteDto.toDomain()
-                        }
-                    }
-                    .filter { it.checkOutDate.isEqual(today) }
-                    .map { CheckOut(it, java.time.LocalTime.of(11, 0)) }
+            val reservationDtos = response.body() ?: emptyList()
+            val apiCheckOuts = reservationDtos
+                .map { async { fetchFullReservationAndMap(it) } }
+                .awaitAll()
+                .filter { it?.checkOutDate?.isEqual(today) == true }
+                .map { CheckOut(it!!, LocalTime.of(11, 0)) }
 
-                // GET EXTERNAL BOOKINGS
-                val externalBookings = iCalSyncRepository.getExternalBookings()
-                val externalCheckOuts = externalBookings
-                    .filter { it.checkOutDate == today }
-                    .map { CheckOut(it, java.time.LocalTime.of(11, 0)) }
+            val externalBookings = iCalSyncRepository.getExternalBookings()
+            val externalCheckOuts = externalBookings
+                .filter { it.checkOutDate == today }
+                .map { CheckOut(it, LocalTime.of(11, 0)) }
 
-                // MERGE
-                val allCheckOuts = apiCheckOuts + externalCheckOuts
-
-                Log.d("DashboardRepo", "Total check-outs: ${allCheckOuts.size}")
-                NetworkResult.Success(allCheckOuts)
-            } else {
-                val errorBody = response.errorBody()?.string()
-                Log.e("DashboardRepo", "Error ${response.code()}: $errorBody")
-                NetworkResult.Error("Failed to fetch reservations: ${response.message()}")
-            }
+            NetworkResult.Success(apiCheckOuts + externalCheckOuts)
         } catch (e: Exception) {
-            Log.e("DashboardRepo", "Exception computing check-outs", e)
-            NetworkResult.Error(e.message ?: "An error occurred")
+            NetworkResult.Error(e.message ?: "UNKNOWN_ERROR")
         }
     }
 
-    override suspend fun getThisWeekBookings(): NetworkResult<List<WeekBooking>> {
-        return try {
+    override suspend fun getThisWeekBookings(): NetworkResult<List<WeekBooking>> = coroutineScope {
+        try {
             val (weekStart, weekEnd) = DateUtils.getCurrentWeekDates()
             val today = DateUtils.now()
 
@@ -147,80 +87,34 @@ class DashboardRepositoryImpl @Inject constructor(
                 sortOrder = "asc"
             )
 
-            if (response.isSuccessful) {
-                val reservationDtos = response.body() ?: emptyList()
+            if (!response.isSuccessful) return@coroutineScope NetworkResult.Error("API_ERROR_${response.code()}")
 
-                // Fetch full details and filter API bookings
-                val apiWeekBookings = reservationDtos
-                    .mapNotNull { incompleteDto ->
-                        try {
-                            if (incompleteDto.id == null) return@mapNotNull null
-                            val fullResponse = api.getReservationById(incompleteDto.id)
-                            val fullDto = if (fullResponse.isSuccessful) {
-                                fullResponse.body()
-                            } else {
-                                incompleteDto
-                            }
-                            fullDto?.toDomain()
-                        } catch (e: Exception) {
-                            incompleteDto.toDomain()
-                        }
-                    }
-                    .filter { reservation ->
-                        val checkInDate = reservation.checkInDate
-                        !checkInDate.isBefore(weekStart) &&
-                                !checkInDate.isAfter(weekEnd) &&
-                                !checkInDate.isBefore(today)
-                    }
-                    .map { WeekBooking(it, it.checkInDate.dayOfWeek, it.checkInDate) }
-
-                // GET EXTERNAL BOOKINGS
-                val externalBookings = iCalSyncRepository.getExternalBookings()
-                val externalWeekBookings = externalBookings
-                    .filter { reservation ->
-                        val checkInDate = reservation.checkInDate
-                        !checkInDate.isBefore(weekStart) &&
-                                !checkInDate.isAfter(weekEnd) &&
-                                !checkInDate.isBefore(today)
-                    }
-                    .map { WeekBooking(it, it.checkInDate.dayOfWeek, it.checkInDate) }
-
-                // MERGE AND SORT
-                val allBookings = (apiWeekBookings + externalWeekBookings)
-                    .sortedBy { it.date }
-
-                // ADD THIS LOGGING
-                Log.d("DashboardRepo", "")
-                Log.d("DashboardRepo", "📅 THIS WEEK BOOKINGS MERGE:")
-                Log.d("DashboardRepo", "   API bookings: ${apiWeekBookings.size}")
-                Log.d("DashboardRepo", "   External bookings: ${externalWeekBookings.size}")
-                Log.d("DashboardRepo", "   Total: ${allBookings.size}")
-                Log.d("DashboardRepo", "")
-
-                externalWeekBookings.forEach { booking ->
-                    Log.d("DashboardRepo", "   🌐 External: ${booking.reservation.bookingSource.displayName()}")
-                    Log.d("DashboardRepo", "      Date: ${booking.date}")
-                    Log.d("DashboardRepo", "      Guest: ${booking.reservation.primaryGuest.fullName}")
+            val apiWeekBookings = (response.body() ?: emptyList())
+                .map { async { fetchFullReservationAndMap(it) } }
+                .awaitAll()
+                .filterNotNull()
+                .filter { res ->
+                    val date = res.checkInDate
+                    !date.isBefore(weekStart) && !date.isAfter(weekEnd) && !date.isBefore(today)
                 }
+                .map { WeekBooking(it, it.checkInDate.dayOfWeek, it.checkInDate) }
 
-                Log.d("DashboardRepo", "Total week bookings: ${allBookings.size}")
+            val externalWeekBookings = iCalSyncRepository.getExternalBookings()
+                .filter { res ->
+                    val date = res.checkInDate
+                    !date.isBefore(weekStart) && !date.isAfter(weekEnd) && !date.isBefore(today)
+                }
+                .map { WeekBooking(it, it.checkInDate.dayOfWeek, it.checkInDate) }
 
-                Log.d("DashboardRepo", "Total week bookings: ${allBookings.size}")
-                NetworkResult.Success(allBookings)
-            } else {
-                val errorBody = response.errorBody()?.string()
-                Log.e("DashboardRepo", "Error ${response.code()}: $errorBody")
-                NetworkResult.Error("Failed to fetch week bookings: ${response.message()}")
-            }
+            val allSorted = (apiWeekBookings + externalWeekBookings).sortedBy { it.date }
+            NetworkResult.Success(allSorted)
         } catch (e: Exception) {
-            Log.e("DashboardRepo", "Exception computing week bookings", e)
-            NetworkResult.Error(e.message ?: "An error occurred")
+            NetworkResult.Error(e.message ?: "UNKNOWN_ERROR")
         }
     }
 
-    override suspend fun getPendingReservations(): NetworkResult<List<Reservation>> {
-        return try {
-            Log.d("DashboardRepo", "Fetching pending reservations")
+    override suspend fun getPendingReservations(): NetworkResult<List<Reservation>> = coroutineScope {
+        try {
             val response = api.getReservations(
                 status = "pending",
                 perPage = 50,
@@ -228,32 +122,30 @@ class DashboardRepositoryImpl @Inject constructor(
                 sortOrder = "asc"
             )
 
+            if (!response.isSuccessful) return@coroutineScope NetworkResult.Error("API_ERROR_${response.code()}")
+
+            val reservations = (response.body() ?: emptyList())
+                .map { async { fetchFullReservationAndMap(it) } }
+                .awaitAll()
+                .filterNotNull()
+
+            NetworkResult.Success(reservations)
+        } catch (e: Exception) {
+            NetworkResult.Error(e.message ?: "UNKNOWN_ERROR")
+        }
+    }
+
+    private suspend fun fetchFullReservationAndMap(incompleteDto: ReservationDto): Reservation? {
+        val id = incompleteDto.id ?: return incompleteDto.toDomain()
+        return try {
+            val response = api.getReservationById(id)
             if (response.isSuccessful) {
-                val reservationDtos = response.body() ?: emptyList()
-
-                val reservations = reservationDtos.mapNotNull { incompleteDto ->
-                    try {
-                        if (incompleteDto.id == null) return@mapNotNull null
-                        val fullResponse = api.getReservationById(incompleteDto.id)
-                        val fullDto = if (fullResponse.isSuccessful) {
-                            fullResponse.body()
-                        } else {
-                            incompleteDto
-                        }
-                        fullDto?.toDomain()
-                    } catch (e: Exception) {
-                        incompleteDto.toDomain()
-                    }
-                }
-
-                Log.d("DashboardRepo", "Got ${reservations.size} pending reservations")
-                NetworkResult.Success(reservations)
+                response.body()?.toDomain()
             } else {
-                NetworkResult.Error("Failed to fetch pending reservations: ${response.message()}")
+                incompleteDto.toDomain()
             }
         } catch (e: Exception) {
-            Log.e("DashboardRepo", "Exception: ${e.message}", e)
-            NetworkResult.Error(e.message ?: "An error occurred")
+            incompleteDto.toDomain()
         }
     }
 }

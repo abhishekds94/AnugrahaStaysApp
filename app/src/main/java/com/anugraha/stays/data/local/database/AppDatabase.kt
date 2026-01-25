@@ -10,7 +10,7 @@ import com.anugraha.stays.data.local.database.entity.ExternalBookingEntity
     entities = [
         ExternalBookingEntity::class
     ],
-    version = 2,  // Start with version 1 since this is new
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

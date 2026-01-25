@@ -10,16 +10,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.anugraha.stays.presentation.components.AnugrahaPasswordTextField
 import com.anugraha.stays.presentation.components.AnugrahaPrimaryButton
 import com.anugraha.stays.presentation.components.AnugrahaTextField
 import com.anugraha.stays.presentation.components.LoadingScreen
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
+import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun LoginScreen(
@@ -27,17 +26,31 @@ fun LoginScreen(
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(state.isLoginSuccessful) {
-        if (state.isLoginSuccessful) {
-            onLoginSuccess()
+    LaunchedEffect(viewModel.effect) {
+        viewModel.effect.collectLatest { effect ->
+            when (effect) {
+                is LoginEffect.NavigateToDashboard -> onLoginSuccess()
+                is LoginEffect.ShowError -> {
+                    snackbarHostState.showSnackbar(effect.message)
+                }
+            }
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        LoginContent(state = state, onIntent = viewModel::handleIntent)
-        if (state.isLoading) {
-            LoadingScreen(message = "Authenticating...")
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            LoginContent(state = state, onIntent = viewModel::handleIntent)
+            if (state.isLoading) {
+                LoadingScreen(message = "Authenticating...")
+            }
         }
     }
 }
@@ -57,7 +70,6 @@ private fun LoginContent(
     ) {
         Spacer(modifier = Modifier.height(80.dp))
 
-        // Logo
         Box(
             modifier = Modifier
                 .size(100.dp)
@@ -77,7 +89,6 @@ private fun LoginContent(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Title
         Text(
             text = "Admin Login",
             style = MaterialTheme.typography.headlineMedium,
@@ -87,7 +98,6 @@ private fun LoginContent(
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        // Email Field
         AnugrahaTextField(
             value = state.email,
             onValueChange = { onIntent(LoginIntent.EmailChanged(it)) },
@@ -99,7 +109,6 @@ private fun LoginContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Password Field
         AnugrahaPasswordTextField(
             value = state.password,
             onValueChange = { onIntent(LoginIntent.PasswordChanged(it)) },
@@ -110,7 +119,6 @@ private fun LoginContent(
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        // Error Message
         state.error?.let { error ->
             Text(
                 text = error,
@@ -120,7 +128,6 @@ private fun LoginContent(
             )
         }
 
-        // Login Button
         AnugrahaPrimaryButton(
             text = "Submit",
             onClick = { onIntent(LoginIntent.Login) },

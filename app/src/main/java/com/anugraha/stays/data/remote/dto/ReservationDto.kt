@@ -67,7 +67,6 @@ data class ReservationDto(
     @SerializedName("updated_at")
     val updatedAt: String? = null,
 
-    // Nested objects from API responses
     @SerializedName("primary_guest")
     val primaryGuest: GuestDto? = null,
 
@@ -88,21 +87,16 @@ data class ReservationDto(
 )
 
 fun ReservationDto.toDomain(): Reservation? {
-    // Validate required fields
     if (id == null || checkInDate == null || checkOutDate == null) {
-        Log.e("ReservationDto", "Missing required fields: id=$id, checkIn=$checkInDate, checkOut=$checkOutDate")
         return null
     }
 
     return try {
-        // PRIORITY 1: Use nested primaryGuest object if available
         val guestDto = primaryGuest ?: guest
 
         val guest = if (guestDto != null) {
-            Log.d("ReservationDto", "Using guest data: ${guestDto.fullName}")
             guestDto.toDomain()
         } else {
-            Log.w("ReservationDto", "No guest data found, using fallback for ID: $id")
             Guest(
                 fullName = "Guest #${primaryGuestId ?: id}",
                 phone = "Not Available",
@@ -110,7 +104,6 @@ fun ReservationDto.toDomain(): Reservation? {
             )
         }
 
-        // Create room object
         val roomObj = if (room != null) {
             room.toDomain()
         } else {
@@ -126,7 +119,6 @@ fun ReservationDto.toDomain(): Reservation? {
             )
         }
 
-        // Parse check-in time
         val checkInTime = (estimatedCheckInTime ?: arrivalTime)?.let {
             parseTime(it)
         }
@@ -148,9 +140,6 @@ fun ReservationDto.toDomain(): Reservation? {
             transactionId = paymentReference,
             paymentStatus = if ((paymentAmount?.toDoubleOrNull() ?: 0.0) > 0) "Paid" else "Pending"
         )
-
-        Log.d("ReservationDto", "Successfully mapped reservation ${reservation.reservationNumber} with guest: ${reservation.primaryGuest.fullName}")
-
         reservation
     } catch (e: Exception) {
         Log.e("ReservationDto", "Error converting DTO to Domain: ${e.message}", e)
@@ -169,14 +158,11 @@ private fun parseDate(dateString: String): LocalDate {
 
 private fun parseTime(timeString: String): LocalTime? {
     return try {
-        // Handle different time formats
         when {
             timeString.contains(":") && timeString.length <= 8 -> {
-                // Format: "11:00:00" or "11:00"
                 LocalTime.parse(timeString)
             }
             timeString.contains(":") -> {
-                // Format with timezone: "11:00:00.000000Z"
                 LocalTime.parse(timeString.substringBefore("."))
             }
             else -> null

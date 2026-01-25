@@ -4,22 +4,16 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.anugraha.stays.presentation.components.EmptyState
 import com.anugraha.stays.presentation.components.ErrorScreen
 import com.anugraha.stays.presentation.components.LoadingScreen
 import com.anugraha.stays.presentation.screens.dashboard.components.CheckInSection
@@ -38,12 +32,19 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
-
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    LaunchedEffect(Unit) {
-        viewModel.toastMessage.collectLatest { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    LaunchedEffect(viewModel.effect) {
+        viewModel.effect.collectLatest { effect ->
+            when (effect) {
+                is DashboardEffect.ShowToast -> {
+                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                }
+                is DashboardEffect.ShowError -> {
+                    snackbarHostState.showSnackbar(effect.message)
+                }
+            }
         }
     }
 
@@ -52,7 +53,6 @@ fun DashboardScreen(
             TopAppBar(
                 title = { Text("Dashboard", fontWeight = FontWeight.Bold) },
                 actions = {
-                    // ADD THIS SYNC BUTTON
                     IconButton(onClick = {
                         viewModel.handleIntent(DashboardIntent.ForceResync)
                     }) {
@@ -63,7 +63,8 @@ fun DashboardScreen(
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         when {
             state.isLoading && !state.isRefreshing -> {
@@ -81,7 +82,7 @@ fun DashboardScreen(
                 DashboardContent(
                     state = state,
                     onNavigateToBookingDetails = onNavigateToBookingDetails,
-                    onNavigateToPendingDetails = onNavigateToBookingDetails, // ADDED
+                    onNavigateToPendingDetails = onNavigateToBookingDetails,
                     onRefresh = { viewModel.handleIntent(DashboardIntent.RefreshData) },
                     onAcceptReservation = { id ->
                         viewModel.handleIntent(DashboardIntent.AcceptReservation(id))
@@ -100,7 +101,7 @@ fun DashboardScreen(
 private fun DashboardContent(
     state: DashboardState,
     onNavigateToBookingDetails: (Int) -> Unit,
-    onNavigateToPendingDetails: (Int) -> Unit, // ADDED
+    onNavigateToPendingDetails: (Int) -> Unit,
     onRefresh: () -> Unit,
     onAcceptReservation: (Int) -> Unit,
     onDeclineReservation: (Int) -> Unit,
@@ -119,7 +120,7 @@ private fun DashboardContent(
                 start = 16.dp,
                 end = 16.dp,
                 top = 16.dp,
-                bottom = 80.dp  // Add extra padding at bottom for navbar
+                bottom = 80.dp
             ),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
@@ -150,7 +151,7 @@ private fun DashboardContent(
             item {
                 PendingReservationsSection(
                     pendingReservations = state.pendingReservations,
-                    onDetailsClick = { onNavigateToPendingDetails(it.id) }, // UPDATED: Navigate to pending details
+                    onDetailsClick = { onNavigateToPendingDetails(it.id) },
                     onAccept = onAcceptReservation,
                     onDecline = onDeclineReservation,
                     isLoading = state.isLoadingPendingReservations

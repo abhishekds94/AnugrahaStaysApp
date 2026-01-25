@@ -1,6 +1,5 @@
 package com.anugraha.stays.presentation.screens.reservations
 
-import android.annotation.SuppressLint
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -10,14 +9,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -34,6 +34,7 @@ import com.anugraha.stays.presentation.components.EmptyState
 import com.anugraha.stays.presentation.components.ErrorScreen
 import com.anugraha.stays.presentation.components.LoadingScreen
 import com.anugraha.stays.util.DateUtils.toDisplayFormat
+import kotlinx.coroutines.flow.collectLatest
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
@@ -44,136 +45,152 @@ fun ReservationsScreen(
     viewModel: ReservationsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF8F9FA)) // Light gray background
-            .statusBarsPadding() // Add padding for status bar
-    ) {
-        // Title FIRST
-        Text(
-            text = "All Reservations",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            fontSize = 28.sp,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-            color = Color.Black
-        )
-
-        // Search Bar BELOW title
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(50.dp),
-            color = Color(0xFFE8EAED) // Light gray for search
-        ) {
-            TextField(
-                value = state.searchQuery,
-                onValueChange = {
-                    viewModel.handleIntent(ReservationsIntent.SearchQueryChanged(it))
-                },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = {
-                    Text(
-                        text = "Search reservations...",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color(0xFF5F6368)
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = Color(0xFF5F6368),
-                        modifier = Modifier.size(24.dp)
-                    )
-                },
-                trailingIcon = {
-                    if (state.searchQuery.isNotEmpty()) {
-                        IconButton(
-                            onClick = {
-                                viewModel.handleIntent(ReservationsIntent.SearchQueryChanged(""))
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Clear",
-                                tint = Color(0xFF5F6368)
-                            )
-                        }
-                    }
-                },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFFE8EAED),
-                    unfocusedContainerColor = Color(0xFFE8EAED),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = Color(0xFF003D82),
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black
-                ),
-                textStyle = MaterialTheme.typography.bodyLarge,
-                singleLine = true
-            )
-        }
-
-        // Content
-        when {
-            state.isLoading -> LoadingScreen(message = "Loading all reservations...")
-            state.error != null -> ErrorScreen(
-                message = state.error ?: "Unknown error",
-                onRetry = { viewModel.handleIntent(ReservationsIntent.LoadReservations) }
-            )
-
-            state.filteredReservations.isEmpty() -> {
-                EmptyState(
-                    message = if (state.searchQuery.isEmpty())
-                        "No reservations found"
-                    else
-                        "No results for \"${state.searchQuery}\""
-                )
+    LaunchedEffect(viewModel.effect) {
+        viewModel.effect.collectLatest { effect ->
+            when (effect) {
+                is ReservationsEffect.ShowError -> {
+                    snackbarHostState.showSnackbar(effect.message)
+                }
             }
+        }
+    }
 
-            else -> {
-                LazyColumn(
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFF8F9FA))
+                    .statusBarsPadding()
+            ) {
+                Text(
+                    text = "All Reservations",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 28.sp,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                    color = Color.Black
+                )
+
+                Surface(
                     modifier = Modifier
-                        .fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 8.dp,
-                        bottom = 140.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(50.dp),
+                    color = Color(0xFFE8EAED)
                 ) {
-                    // Get sorted months (descending)
-                    val sortedMonths = state.getSortedMonths()
-
-                    sortedMonths.forEach { month ->
-                        val reservationsInMonth = state.groupedReservations[month] ?: emptyList()
-                        val isExpanded = state.expandedMonths.contains(month)
-
-                        // Month group card (header + bookings as one card)
-                        item(key = "month_$month") {
-                            MonthGroupCard(
-                                month = month,
-                                reservationCount = reservationsInMonth.size,
-                                isExpanded = isExpanded,
-                                reservations = reservationsInMonth,
-                                onToggle = {
-                                    viewModel.handleIntent(
-                                        ReservationsIntent.ToggleMonthExpansion(month)
-                                    )
-                                },
-                                onReservationClick = { reservation ->
-                                    // Only navigate if it's a direct booking
-                                    if (reservation.bookingSource == BookingSource.DIRECT) {
-                                        onNavigateToBookingDetails(reservation.id)
-                                    }
-                                }
+                    TextField(
+                        value = state.searchQuery,
+                        onValueChange = {
+                            viewModel.handleIntent(ReservationsIntent.SearchQueryChanged(it))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = {
+                            Text(
+                                text = "Search reservations...",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color(0xFF5F6368)
                             )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = Color(0xFF5F6368),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (state.searchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = {
+                                        viewModel.handleIntent(ReservationsIntent.SearchQueryChanged(""))
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear",
+                                        tint = Color(0xFF5F6368)
+                                    )
+                                }
+                            }
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFE8EAED),
+                            unfocusedContainerColor = Color(0xFFE8EAED),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            cursorColor = Color(0xFF003D82),
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black
+                        ),
+                        textStyle = MaterialTheme.typography.bodyLarge,
+                        singleLine = true
+                    )
+                }
+            }
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(Color(0xFFF8F9FA))
+        ) {
+            when {
+                state.isLoading -> LoadingScreen(message = "Loading all reservations...")
+                state.error != null && state.reservations.isEmpty() -> ErrorScreen(
+                    message = state.error ?: "Unknown error",
+                    onRetry = { viewModel.handleIntent(ReservationsIntent.LoadReservations) }
+                )
+
+                state.filteredReservations.isEmpty() -> {
+                    EmptyState(
+                        message = if (state.searchQuery.isEmpty())
+                            "No reservations found"
+                        else
+                            "No results for \"${state.searchQuery}\""
+                    )
+                }
+
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 8.dp,
+                            bottom = 140.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        val sortedMonths = state.getSortedMonths()
+
+                        sortedMonths.forEach { month ->
+                            val reservationsInMonth = state.groupedReservations[month] ?: emptyList()
+                            val isExpanded = state.expandedMonths.contains(month)
+
+                            item(key = "month_$month") {
+                                MonthGroupCard(
+                                    month = month,
+                                    reservationCount = reservationsInMonth.size,
+                                    isExpanded = isExpanded,
+                                    reservations = reservationsInMonth,
+                                    onToggle = {
+                                        viewModel.handleIntent(
+                                            ReservationsIntent.ToggleMonthExpansion(month)
+                                        )
+                                    },
+                                    onReservationClick = { reservation ->
+                                        if (reservation.bookingSource == BookingSource.DIRECT) {
+                                            onNavigateToBookingDetails(reservation.id)
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -202,12 +219,11 @@ private fun MonthGroupCard(
         shadowElevation = 2.dp
     ) {
         Column {
-            // Month header
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onToggle),
-                color = Color(0xFF003D82), // Deep blue
+                color = Color(0xFF003D82),
                 shape = RoundedCornerShape(
                     topStart = 20.dp,
                     topEnd = 20.dp,
@@ -248,7 +264,6 @@ private fun MonthGroupCard(
                 }
             }
 
-            // Bookings list (inside same card)
             AnimatedVisibility(
                 visible = isExpanded,
                 enter = fadeIn() + expandVertically(),
@@ -257,7 +272,7 @@ private fun MonthGroupCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFFF5F5F5)) // Light background for bookings
+                        .background(Color(0xFFF5F5F5))
                 ) {
                     reservations.forEachIndexed { index, reservation ->
                         ReservationItem(
@@ -266,9 +281,8 @@ private fun MonthGroupCard(
                             isLast = index == reservations.size - 1
                         )
 
-                        // Divider between items (not after last item)
                         if (index < reservations.size - 1) {
-                            Divider(
+                            HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 16.dp),
                                 color = Color(0xFFE0E0E0),
                                 thickness = 0.5.dp
@@ -303,7 +317,6 @@ private fun ReservationItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                // Guest name
                 Text(
                     text = reservation.primaryGuest.fullName,
                     style = MaterialTheme.typography.titleLarge,
@@ -315,7 +328,6 @@ private fun ReservationItem(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Booking source
                 Text(
                     text = when (reservation.bookingSource) {
                         BookingSource.AIRBNB -> "Airbnb"
@@ -330,7 +342,6 @@ private fun ReservationItem(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (isCancelled) {
-                    // Cancelled message
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -349,13 +360,11 @@ private fun ReservationItem(
                         )
                     }
                 } else {
-                    // Date range and guest count in same row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Date range
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -364,7 +373,7 @@ private fun ReservationItem(
                                 imageVector = Icons.Default.CalendarToday,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
-                                tint = Color(0xFFFF9800) // Orange
+                                tint = Color(0xFFFF9800)
                             )
                             Text(
                                 text = "${reservation.checkInDate.toDisplayFormat()} - ${reservation.checkOutDate.toDisplayFormat()}",
@@ -374,7 +383,6 @@ private fun ReservationItem(
                             )
                         }
 
-                        // Guest count
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -383,7 +391,7 @@ private fun ReservationItem(
                                 imageVector = Icons.Default.People,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
-                                tint = Color(0xFFFF9800) // Orange
+                                tint = Color(0xFFFF9800)
                             )
                             Text(
                                 text = "${reservation.adults + reservation.kids} Guest${if (reservation.adults + reservation.kids != 1) "s" else ""}",
@@ -398,7 +406,6 @@ private fun ReservationItem(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Arrow (show for all in design, but only clickable for direct bookings)
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = if (isClickable) "View details" else null,

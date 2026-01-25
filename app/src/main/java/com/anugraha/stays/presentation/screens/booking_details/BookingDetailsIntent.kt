@@ -1,5 +1,7 @@
 package com.anugraha.stays.presentation.screens.booking_details
 
-sealed class BookingDetailsIntent {
+import com.anugraha.stays.util.ViewIntent
+
+sealed class BookingDetailsIntent : ViewIntent {
     data class LoadBooking(val reservationId: Int) : BookingDetailsIntent()
 }

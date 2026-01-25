@@ -1,14 +1,16 @@
 package com.anugraha.stays.presentation.screens.reservations
 
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.anugraha.stays.domain.model.Reservation
 import com.anugraha.stays.domain.model.ReservationStatus
 import com.anugraha.stays.domain.usecase.ical.GetExternalBookingsUseCase
 import com.anugraha.stays.domain.usecase.reservation.GetReservationsUseCase
 import com.anugraha.stays.domain.usecase.reservation.SearchReservationsUseCase
+import com.anugraha.stays.util.BaseViewModel
 import com.anugraha.stays.util.NetworkResult
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.YearMonth
 import javax.inject.Inject
@@ -18,16 +20,13 @@ class ReservationsViewModel @Inject constructor(
     private val getReservationsUseCase: GetReservationsUseCase,
     private val searchReservationsUseCase: SearchReservationsUseCase,
     private val getExternalBookingsUseCase: GetExternalBookingsUseCase
-) : ViewModel() {
-
-    private val _state = MutableStateFlow(ReservationsState())
-    val state: StateFlow<ReservationsState> = _state.asStateFlow()
+) : BaseViewModel<ReservationsState, ReservationsIntent, ReservationsEffect>(ReservationsState()) {
 
     init {
         handleIntent(ReservationsIntent.LoadReservations)
     }
 
-    fun handleIntent(intent: ReservationsIntent) {
+    override fun handleIntent(intent: ReservationsIntent) {
         when (intent) {
             ReservationsIntent.LoadReservations -> loadAllReservations()
             is ReservationsIntent.SearchQueryChanged -> updateSearchQuery(intent.query)
@@ -37,129 +36,93 @@ class ReservationsViewModel @Inject constructor(
 
     private fun loadAllReservations() {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, isLoadingExternal = true, error = null) }
+            updateState { it.copy(isLoading = true, isLoadingExternal = true, error = null) }
 
-            // Load both direct and external bookings in parallel
-            val directReservationsJob = launch { loadDirectReservations() }
-            val externalBookingsJob = launch { loadExternalBookings() }
+            val directReservationsDeferred = async { getDirectReservations() }
+            val externalBookingsDeferred = async { getExternalBookings() }
 
-            // Wait for both to complete
-            directReservationsJob.join()
-            externalBookingsJob.join()
+            val directReservations = directReservationsDeferred.await()
+            val externalBookings = externalBookingsDeferred.await()
 
-            // Combine and group reservations
-            combineAndGroupReservations()
+            val allReservations = directReservations + externalBookings
+            updateState { it.copy(reservations = allReservations) }
 
-            _state.update { it.copy(isLoading = false, isLoadingExternal = false) }
+            combineAndGroupReservations(allReservations)
+
+            updateState { it.copy(isLoading = false, isLoadingExternal = false) }
         }
     }
 
-    private suspend fun loadDirectReservations() {
-        // Load ALL reservations (no status filter to include past bookings)
-        when (val result = getReservationsUseCase(
-            page = 1,
-            perPage = 1000,
-            status = null  // null = get all statuses including past bookings
-        )) {
-            is NetworkResult.Success -> {
-                android.util.Log.d("ReservationsVM", "Loaded ${result.data.size} direct reservations")
-                _state.update {
-                    it.copy(reservations = result.data)
-                }
-            }
+    private suspend fun getDirectReservations(): List<Reservation> {
+        return when (val result = getReservationsUseCase(page = 1, perPage = 1000, status = null)) {
+            is NetworkResult.Success -> result.data ?: emptyList()
             is NetworkResult.Error -> {
-                android.util.Log.e("ReservationsVM", "Error loading direct reservations: ${result.message}")
-                _state.update { it.copy(error = result.message) }
+                sendEffect(ReservationsEffect.ShowError(result.message ?: "Failed to load reservations"))
+                emptyList()
             }
-            NetworkResult.Loading -> {}
+            NetworkResult.Loading -> emptyList()
         }
     }
 
-    private suspend fun loadExternalBookings() {
-        try {
-            val externalBookings = getExternalBookingsUseCase()
-            android.util.Log.d("ReservationsVM", "Loaded ${externalBookings.size} external bookings")
-
-            // Merge with existing reservations
-            val currentReservations = _state.value.reservations
-            val allReservations = currentReservations + externalBookings
-
-            _state.update {
-                it.copy(reservations = allReservations)
-            }
+    private suspend fun getExternalBookings(): List<Reservation> {
+        return try {
+            getExternalBookingsUseCase()
         } catch (e: Exception) {
-            android.util.Log.e("ReservationsVM", "Error loading external bookings: ${e.message}")
+            emptyList()
         }
     }
 
-    private fun combineAndGroupReservations() {
-        val allReservations = _state.value.reservations
-
-        // Sort by check-in date descending (latest first)
-        // BUT within same date, admin-cancelled bookings go to the bottom
+    private fun combineAndGroupReservations(allReservations: List<Reservation>) {
         val sortedReservations = allReservations.sortedWith(
-            compareByDescending<com.anugraha.stays.domain.model.Reservation> { it.checkInDate }
+            compareByDescending<Reservation> { it.checkInDate }
                 .thenBy { if (it.status == ReservationStatus.ADMIN_CANCELLED) 1 else 0 }
         )
 
-        // Group by YearMonth
         val grouped = sortedReservations.groupBy { reservation ->
             YearMonth.from(reservation.checkInDate)
         }.mapValues { (_, reservations) ->
-            // Within each month group, sort again to ensure cancelled at bottom
             reservations.sortedWith(
-                compareByDescending<com.anugraha.stays.domain.model.Reservation> { it.checkInDate }
+                compareByDescending<Reservation> { it.checkInDate }
                     .thenBy { if (it.status == ReservationStatus.ADMIN_CANCELLED) 1 else 0 }
             )
         }
 
-        // Start with ALL months collapsed (empty set)
-        val expandedMonths = emptySet<YearMonth>()
-
-        _state.update {
+        updateState {
             it.copy(
                 filteredReservations = sortedReservations,
                 groupedReservations = grouped,
-                expandedMonths = expandedMonths  // All collapsed by default
+                expandedMonths = emptySet()
             )
         }
-
-        android.util.Log.d("ReservationsVM", "Grouped ${sortedReservations.size} reservations into ${grouped.size} months")
     }
 
     private fun updateSearchQuery(query: String) {
-        _state.update { it.copy(searchQuery = query) }
+        updateState { it.copy(searchQuery = query) }
 
         if (query.isBlank()) {
-            // Reset to all reservations and regroup
-            combineAndGroupReservations()
+            combineAndGroupReservations(currentState.reservations)
         } else {
             viewModelScope.launch {
-                searchReservationsUseCase(query).collect { filtered ->
-                    // Sort filtered results with admin-cancelled at bottom
+                searchReservationsUseCase(query).collectLatest { filtered ->
                     val sortedFiltered = filtered.sortedWith(
-                        compareByDescending<com.anugraha.stays.domain.model.Reservation> { it.checkInDate }
+                        compareByDescending<Reservation> { it.checkInDate }
                             .thenBy { if (it.status == ReservationStatus.ADMIN_CANCELLED) 1 else 0 }
                     )
 
-                    // Regroup filtered results
                     val grouped = sortedFiltered.groupBy { reservation ->
                         YearMonth.from(reservation.checkInDate)
                     }.mapValues { (_, reservations) ->
                         reservations.sortedWith(
-                            compareByDescending<com.anugraha.stays.domain.model.Reservation> { it.checkInDate }
+                            compareByDescending<Reservation> { it.checkInDate }
                                 .thenBy { if (it.status == ReservationStatus.ADMIN_CANCELLED) 1 else 0 }
                         )
                     }
 
-                    // Expand all months when searching (to show results)
-                    val expandedMonths = grouped.keys.toSet()
-
-                    _state.update {
+                    updateState {
                         it.copy(
                             filteredReservations = sortedFiltered,
                             groupedReservations = grouped,
-                            expandedMonths = expandedMonths
+                            expandedMonths = grouped.keys.toSet()
                         )
                     }
                 }
@@ -168,15 +131,13 @@ class ReservationsViewModel @Inject constructor(
     }
 
     private fun toggleMonthExpansion(month: YearMonth) {
-        _state.update {
+        updateState {
             val isCurrentlyExpanded = it.expandedMonths.contains(month)
-
             val newExpanded = if (isCurrentlyExpanded) {
                 it.expandedMonths - month
             } else {
                 setOf(month)
             }
-
             it.copy(expandedMonths = newExpanded)
         }
     }

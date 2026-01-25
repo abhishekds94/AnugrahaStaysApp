@@ -17,15 +17,8 @@ class ICalParser {
 
     fun parseICalString(icalContent: String, source: ICalSource): List<ICalEvent> {
         return try {
-            Log.d("ICalParser", "")
-            Log.d("ICalParser", "🔍 PARSING iCAL for ${source.name}")
-            Log.d("ICalParser", "   Content length: ${icalContent.length} characters")
-            Log.d("ICalParser", "   First 200 chars: ${icalContent.take(200)}")
-
             val events = mutableListOf<ICalEvent>()
             val lines = icalContent.lines()
-
-            Log.d("ICalParser", "   Total lines: ${lines.size}")
 
             var currentEvent: MutableMap<String, String>? = null
             var currentKey = ""
@@ -38,14 +31,12 @@ class ICalParser {
                     trimmedLine == "BEGIN:VEVENT" -> {
                         eventCount++
                         currentEvent = mutableMapOf()
-                        Log.d("ICalParser", "   ▶️ Found VEVENT #$eventCount")
                     }
                     trimmedLine == "END:VEVENT" && currentEvent != null -> {
-                        Log.d("ICalParser", "      Parsing event data...")
                         parseEvent(currentEvent, source)?.let {
                             events.add(it)
-                            Log.d("ICalParser", "      ✅ Event parsed successfully")
-                        } ?: Log.w("ICalParser", "      ⚠️ Event parsing returned null")
+                            Log.d("ICalParser", "Event parsed successfully")
+                        } ?: Log.w("ICalParser", "Event parsing returned null")
                         currentEvent = null
                     }
                     currentEvent != null && trimmedLine.isNotEmpty() -> {
@@ -70,15 +61,9 @@ class ICalParser {
                     }
                 }
             }
-
-            Log.d("ICalParser", "")
-            Log.d("ICalParser", "   ✅ Parsing complete for ${source.name}")
-            Log.d("ICalParser", "   Found ${events.size} valid events out of $eventCount VEVENT blocks")
-            Log.d("ICalParser", "")
-
             events
         } catch (e: Exception) {
-            Log.e("ICalParser", "❌ Error parsing iCal for ${source.name}: ${e.message}", e)
+            Log.e("ICalParser", "Error parsing iCal for ${source.name}: ${e.message}", e)
             emptyList()
         }
     }
@@ -115,24 +100,19 @@ class ICalParser {
 
             val date = when {
                 cleanDate.contains('T') -> {
-                    // Has time component - parse as date-time in IST
                     val dateTimeStr = cleanDate.take(15) // YYYYMMDDTHHmmss
                     java.time.LocalDateTime.parse(dateTimeStr, java.time.format.DateTimeFormatter.BASIC_ISO_DATE)
                         .atZone(com.anugraha.stays.util.DateUtils.IST_ZONE)
                         .toLocalDate()
                 }
                 cleanDate.length == 8 -> {
-                    // YYYYMMDD format
                     java.time.LocalDate.parse(cleanDate, java.time.format.DateTimeFormatter.BASIC_ISO_DATE)
                 }
                 cleanDate.contains('-') -> {
-                    // YYYY-MM-DD format
                     java.time.LocalDate.parse(cleanDate.take(10))
                 }
                 else -> null
             }
-
-            Log.d("ICalParser", "Parsed date: $dateString → $date (IST)")
             date
 
         } catch (e: Exception) {

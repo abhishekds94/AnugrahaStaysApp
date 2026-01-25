@@ -4,6 +4,7 @@ import com.anugraha.stays.domain.model.CheckIn
 import com.anugraha.stays.domain.model.CheckOut
 import com.anugraha.stays.domain.model.Reservation
 import com.anugraha.stays.domain.model.WeekBooking
+import com.anugraha.stays.util.ViewState
 
 data class DashboardState(
     val todayCheckIns: List<CheckIn> = emptyList(),
@@ -17,4 +18,4 @@ data class DashboardState(
     val isLoadingCheckOuts: Boolean = false,
     val isLoadingWeekBookings: Boolean = false,
     val isLoadingPendingReservations: Boolean = false
-)
+) : ViewState
