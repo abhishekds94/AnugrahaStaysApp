@@ -75,3 +75,9 @@
 -keepclassmembers,allowobfuscation class * {
   @com.google.gson.annotations.SerializedName <fields>;
 }
+
+# Keep BookingCalculator
+-keep class com.anugraha.stays.util.BookingCalculator { *; }
+
+# Keep DebugDataProvider (only in debug builds)
+-keep class com.anugraha.stays.util.DebugDataProvider { *; }

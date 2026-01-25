@@ -9,4 +9,5 @@ sealed class DashboardIntent : ViewIntent {
     data class AcceptReservation(val id: Int) : DashboardIntent()
     data class DeclineReservation(val id: Int) : DashboardIntent()
     object ForceResync : DashboardIntent()
+    object ToggleDebugMode : DashboardIntent()  // New intent for toggling debug mode
 }

@@ -17,5 +17,6 @@ data class DashboardState(
     val isLoadingCheckIns: Boolean = false,
     val isLoadingCheckOuts: Boolean = false,
     val isLoadingWeekBookings: Boolean = false,
-    val isLoadingPendingReservations: Boolean = false
+    val isLoadingPendingReservations: Boolean = false,
+    val useDebugData: Boolean = false  // New field for debug mode
 ) : ViewState

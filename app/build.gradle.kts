@@ -117,6 +117,8 @@ dependencies {
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.34.0")
     implementation("com.google.accompanist:accompanist-swiperefresh:0.34.0")
 
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

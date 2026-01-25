@@ -5,9 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -16,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.anugraha.stays.BuildConfig
 import com.anugraha.stays.presentation.components.ErrorScreen
 import com.anugraha.stays.presentation.components.LoadingScreen
 import com.anugraha.stays.presentation.screens.dashboard.components.CheckInSection
@@ -56,6 +58,26 @@ fun DashboardScreen(
             TopAppBar(
                 title = { Text("Dashboard", fontWeight = FontWeight.Bold) },
                 actions = {
+                    // Debug mode toggle (only show in debug builds)
+                    if (BuildConfig.DEBUG) {
+                        IconButton(onClick = {
+                            viewModel.handleIntent(DashboardIntent.ToggleDebugMode)
+                        }) {
+                            Icon(
+                                imageVector = if (state.useDebugData) {
+                                    Icons.Default.BugReport
+                                } else {
+                                    Icons.Default.Science
+                                },
+                                contentDescription = "Toggle Debug Data",
+                                tint = if (state.useDebugData) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                        }
+                    }
                     IconButton(onClick = {
                         viewModel.handleIntent(DashboardIntent.ForceResync)
                     }) {
@@ -65,7 +87,10 @@ fun DashboardScreen(
                         )
                     }
                     IconButton(onClick = onLogout) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, "Logout")
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = "Logout"
+                        )
                     }
                 }
             )

@@ -19,6 +19,6 @@ data class Reservation(
     val estimatedCheckInTime: LocalTime? = null,
     val transactionId: String? = null,
     val paymentStatus: String? = null,
-    val transportService: String? = null,  // NEW: Transport service (Yes/No)
-    val paymentReference: String? = null    // NEW: Payment reference number
+    val transportService: String? = null,
+    val paymentReference: String? = null
 )
