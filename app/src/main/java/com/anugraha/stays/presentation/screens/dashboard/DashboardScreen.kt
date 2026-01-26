@@ -18,6 +18,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.anugraha.stays.BuildConfig
+import com.anugraha.stays.presentation.components.ConfirmationDialog
+import com.anugraha.stays.presentation.components.ConfirmationMessages
 import com.anugraha.stays.presentation.components.ErrorScreen
 import com.anugraha.stays.presentation.components.LoadingScreen
 import com.anugraha.stays.presentation.screens.dashboard.components.CheckInSection
@@ -40,6 +42,11 @@ fun DashboardScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Confirmation dialog states
+    var showAcceptDialog by remember { mutableStateOf(false) }
+    var showDeclineDialog by remember { mutableStateOf(false) }
+    var selectedReservationId by remember { mutableStateOf<Int?>(null) }
+
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
@@ -51,6 +58,42 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+
+    // Accept Booking Confirmation Dialog
+    if (showAcceptDialog) {
+        ConfirmationDialog(
+            message = ConfirmationMessages.ACCEPT_BOOKING,
+            onConfirm = {
+                selectedReservationId?.let { id ->
+                    viewModel.handleIntent(DashboardIntent.AcceptReservation(id))
+                }
+                showAcceptDialog = false
+                selectedReservationId = null
+            },
+            onDismiss = {
+                showAcceptDialog = false
+                selectedReservationId = null
+            }
+        )
+    }
+
+    // Decline Booking Confirmation Dialog
+    if (showDeclineDialog) {
+        ConfirmationDialog(
+            message = ConfirmationMessages.DECLINE_BOOKING,
+            onConfirm = {
+                selectedReservationId?.let { id ->
+                    viewModel.handleIntent(DashboardIntent.DeclineReservation(id))
+                }
+                showDeclineDialog = false
+                selectedReservationId = null
+            },
+            onDismiss = {
+                showDeclineDialog = false
+                selectedReservationId = null
+            }
+        )
     }
 
     Scaffold(
@@ -116,10 +159,12 @@ fun DashboardScreen(
                     onNavigateToPendingDetails = onNavigateToBookingDetails,
                     onRefresh = { viewModel.handleIntent(DashboardIntent.RefreshData) },
                     onAcceptReservation = { id ->
-                        viewModel.handleIntent(DashboardIntent.AcceptReservation(id))
+                        selectedReservationId = id
+                        showAcceptDialog = true
                     },
                     onDeclineReservation = { id ->
-                        viewModel.handleIntent(DashboardIntent.DeclineReservation(id))
+                        selectedReservationId = id
+                        showDeclineDialog = true
                     },
                     modifier = Modifier.padding(paddingValues)
                 )

@@ -24,6 +24,8 @@ import com.anugraha.stays.domain.model.Availability
 import com.anugraha.stays.domain.model.BookingSource
 import com.anugraha.stays.domain.model.Reservation
 import com.anugraha.stays.domain.model.ReservationStatus
+import com.anugraha.stays.presentation.components.ConfirmationDialog
+import com.anugraha.stays.presentation.components.ConfirmationMessages
 import com.anugraha.stays.presentation.components.ErrorScreen
 import com.anugraha.stays.presentation.components.LoadingScreen
 import kotlinx.coroutines.flow.collectLatest
@@ -43,6 +45,14 @@ fun CalendarScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Confirmation dialog states
+    var showCancelDialog by remember { mutableStateOf(false) }
+    var showMarkClosedDialog by remember { mutableStateOf(false) }
+    var showMarkOpenDialog by remember { mutableStateOf(false) }
+
+    var selectedBookingId by remember { mutableStateOf<Int?>(null) }
+    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
             when (effect) {
@@ -54,6 +64,64 @@ fun CalendarScreen(
                 }
             }
         }
+    }
+
+    // Cancel Booking Confirmation Dialog
+    if (showCancelDialog) {
+        ConfirmationDialog(
+            message = ConfirmationMessages.CANCEL_BOOKING,
+            onConfirm = {
+                if (selectedBookingId != null && selectedDate != null) {
+                    viewModel.handleIntent(
+                        CalendarIntent.CancelBooking(selectedBookingId!!, selectedDate!!)
+                    )
+                }
+                showCancelDialog = false
+                selectedBookingId = null
+                selectedDate = null
+            },
+            onDismiss = {
+                showCancelDialog = false
+                selectedBookingId = null
+                selectedDate = null
+            }
+        )
+    }
+
+    // Mark as Closed Confirmation Dialog
+    if (showMarkClosedDialog) {
+        ConfirmationDialog(
+            message = ConfirmationMessages.MARK_CLOSED,
+            onConfirm = {
+                selectedDate?.let { date ->
+                    viewModel.handleIntent(CalendarIntent.BlockDate(date))
+                }
+                showMarkClosedDialog = false
+                selectedDate = null
+            },
+            onDismiss = {
+                showMarkClosedDialog = false
+                selectedDate = null
+            }
+        )
+    }
+
+    // Mark as Open Confirmation Dialog
+    if (showMarkOpenDialog) {
+        ConfirmationDialog(
+            message = ConfirmationMessages.MARK_OPEN,
+            onConfirm = {
+                selectedDate?.let { date ->
+                    viewModel.handleIntent(CalendarIntent.OpenDate(date))
+                }
+                showMarkOpenDialog = false
+                selectedDate = null
+            },
+            onDismiss = {
+                showMarkOpenDialog = false
+                selectedDate = null
+            }
+        )
     }
 
     Scaffold(
@@ -81,6 +149,19 @@ fun CalendarScreen(
                     state = state,
                     onIntent = viewModel::handleIntent,
                     onBookingClick = onNavigateToBookingDetails,
+                    onCancelBooking = { id, date ->
+                        selectedBookingId = id
+                        selectedDate = date
+                        showCancelDialog = true
+                    },
+                    onBlockDate = { date ->
+                        selectedDate = date
+                        showMarkClosedDialog = true
+                    },
+                    onOpenDate = { date ->
+                        selectedDate = date
+                        showMarkOpenDialog = true
+                    },
                     modifier = Modifier.padding(paddingValues)
                 )
             }
@@ -93,6 +174,9 @@ private fun CalendarContent(
     state: CalendarState,
     onIntent: (CalendarIntent) -> Unit,
     onBookingClick: (Int) -> Unit,
+    onCancelBooking: (Int, LocalDate) -> Unit,
+    onBlockDate: (LocalDate) -> Unit,
+    onOpenDate: (LocalDate) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -130,9 +214,9 @@ private fun CalendarContent(
             reservations = state.reservations,
             availabilities = state.availabilities,
             isActionInProgress = state.isActionInProgress,
-            onBlockDate = { onIntent(CalendarIntent.BlockDate(it)) },
-            onOpenDate = { onIntent(CalendarIntent.OpenDate(it)) },
-            onCancelBooking = { id, date -> onIntent(CalendarIntent.CancelBooking(id, date)) },
+            onBlockDate = onBlockDate,
+            onOpenDate = onOpenDate,
+            onCancelBooking = onCancelBooking,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
