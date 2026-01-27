@@ -9,7 +9,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -93,6 +92,7 @@ private fun LoginContent(
 
         Spacer(modifier = Modifier.height(48.dp))
 
+        // Username field
         AnugrahaTextField(
             value = state.email,
             onValueChange = { onIntent(LoginIntent.EmailChanged(it)) },
@@ -104,16 +104,43 @@ private fun LoginContent(
 
         Spacer(modifier = Modifier.height(20.dp))
 
+        // Password field with visibility toggle
         AnugrahaPasswordTextField(
             value = state.password,
             onValueChange = { onIntent(LoginIntent.PasswordChanged(it)) },
             label = "Password",
             placeholder = "Enter your password",
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !state.isLoading
         )
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
+        // Remember Me checkbox
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = state.rememberMe,
+                onCheckedChange = { onIntent(LoginIntent.RememberMeChanged(it)) },
+                enabled = !state.isLoading,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = MaterialTheme.colorScheme.primary,
+                    uncheckedColor = MaterialTheme.colorScheme.outline
+                )
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Remember me",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Error message
         state.error?.let { error ->
             Text(
                 text = error,
@@ -123,6 +150,7 @@ private fun LoginContent(
             )
         }
 
+        // Login button
         AnugrahaPrimaryButton(
             text = "Submit",
             onClick = { onIntent(LoginIntent.Login) },
@@ -137,7 +165,11 @@ private fun LoginContent(
 private fun LoginPreview() {
     AnugrahaStaysTheme {
         LoginContent(
-            state = LoginState(),
+            state = LoginState(
+                email = "admin@example.com",
+                password = "password",
+                rememberMe = true
+            ),
             onIntent = {}
         )
     }
