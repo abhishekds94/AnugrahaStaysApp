@@ -47,6 +47,31 @@ fun BookingDetailsScreen(
                 is BookingDetailsEffect.ShowError -> {
                     snackbarHostState.showSnackbar(effect.message)
                 }
+                is BookingDetailsEffect.ShowToast -> {
+                    android.widget.Toast.makeText(context, effect.message, android.widget.Toast.LENGTH_SHORT).show()
+                }
+                is BookingDetailsEffect.OpenWhatsApp -> {
+                    try {
+                        // Try WhatsApp Business first
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            data = Uri.parse("https://api.whatsapp.com/send?phone=${effect.phoneNumber}")
+                            setPackage("com.whatsapp.w4b")
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        // Fallback to regular WhatsApp
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                data = Uri.parse("https://api.whatsapp.com/send?phone=${effect.phoneNumber}")
+                                setPackage("com.whatsapp")
+                            }
+                            context.startActivity(intent)
+                        } catch (ex: Exception) {
+                            // Show error if WhatsApp is not installed
+                            android.widget.Toast.makeText(context, "WhatsApp is not installed", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
             }
         }
     }
@@ -88,6 +113,9 @@ fun BookingDetailsScreen(
                         val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
                         context.startActivity(intent)
                     },
+                    onWhatsAppClick = { phone ->
+                        viewModel.handleIntent(BookingDetailsIntent.OpenWhatsApp(phone))
+                    },
                     modifier = Modifier.padding(paddingValues)
                 )
             }
@@ -99,6 +127,7 @@ fun BookingDetailsScreen(
 private fun BookingDetailsContent(
     reservation: Reservation,
     onCallClick: (String) -> Unit,
+    onWhatsAppClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // Safe balance calculation with error handling
@@ -137,14 +166,27 @@ private fun BookingDetailsContent(
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     DetailRow(icon = Icons.Default.Phone, label = "Phone", value = reservation.primaryGuest.phone, modifier = Modifier.weight(1f))
-                    Button(
-                        onClick = { onCallClick(reservation.primaryGuest.phone) },
-                        colors = ButtonDefaults.buttonColors(containerColor = SecondaryOrange),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("CALL")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { onCallClick(reservation.primaryGuest.phone) },
+                            colors = ButtonDefaults.buttonColors(containerColor = SecondaryOrange),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("CALL")
+                        }
+
+                        IconButton(
+                            onClick = { onWhatsAppClick(reservation.primaryGuest.phone) },
+                            colors = IconButtonDefaults.iconButtonColors(containerColor = Color(0xFF25D366))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Whatsapp,
+                                contentDescription = "WhatsApp",
+                                tint = Color.White
+                            )
+                        }
                     }
                 }
 

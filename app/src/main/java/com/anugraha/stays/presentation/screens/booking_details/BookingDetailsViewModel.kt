@@ -16,7 +16,12 @@ class BookingDetailsViewModel @Inject constructor(
     override fun handleIntent(intent: BookingDetailsIntent) {
         when (intent) {
             is BookingDetailsIntent.LoadBooking -> loadBooking(intent.reservationId)
+            is BookingDetailsIntent.OpenWhatsApp -> openWhatsApp(intent.phoneNumber)
         }
+    }
+
+    private fun openWhatsApp(phoneNumber: String) {
+        sendEffect(BookingDetailsEffect.OpenWhatsApp(phoneNumber))
     }
 
     private fun loadBooking(reservationId: Int) {

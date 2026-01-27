@@ -48,8 +48,40 @@ fun PendingDetailsScreen(
                 is PendingDetailsEffect.ShowError -> {
                     snackbarHostState.showSnackbar(effect.message)
                 }
+
                 is PendingDetailsEffect.ShowToast -> {
                     Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                }
+
+                is PendingDetailsEffect.OpenWhatsApp -> {
+                    try {
+                        // WhatsApp Business Intent
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            data = Uri.parse(
+                                "https://api.whatsapp.com/send?phone=${effect.phoneNumber}&text=${
+                                    Uri.encode(effect.message)
+                                }"
+                            )
+                            setPackage("com.whatsapp.w4b") // WhatsApp Business package
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        // Fallback to regular WhatsApp if Business version not installed
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                data = Uri.parse(
+                                    "https://api.whatsapp.com/send?phone=${effect.phoneNumber}&text=${
+                                        Uri.encode(effect.message)
+                                    }"
+                                )
+                                setPackage("com.whatsapp") // Regular WhatsApp package
+                            }
+                            context.startActivity(intent)
+                        } catch (ex: Exception) {
+                            Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT)
+                                .show()
+                        }
+                    }
                 }
             }
         }
@@ -75,6 +107,17 @@ fun PendingDetailsScreen(
             onConfirm = { viewModel.handleIntent(PendingDetailsIntent.ConfirmDecline) },
             onDismiss = { viewModel.handleIntent(PendingDetailsIntent.DismissDialog) },
             isDestructive = true
+        )
+    }
+
+    if (state.showWhatsAppDialog) {
+        WhatsAppConfirmationDialog(
+            onYes = { viewModel.handleIntent(PendingDetailsIntent.SendWhatsAppMessage) },
+            onNo = {
+                viewModel.handleIntent(PendingDetailsIntent.DismissWhatsAppDialog)
+                // Navigate back when No is selected
+                onNavigateBack()
+            }
         )
     }
 
@@ -105,9 +148,16 @@ fun PendingDetailsScreen(
             state.error != null && state.reservation == null -> {
                 ErrorScreen(
                     message = state.error ?: "Unknown error",
-                    onRetry = { viewModel.handleIntent(PendingDetailsIntent.LoadReservation(reservationId)) }
+                    onRetry = {
+                        viewModel.handleIntent(
+                            PendingDetailsIntent.LoadReservation(
+                                reservationId
+                            )
+                        )
+                    }
                 )
             }
+
             state.reservation != null -> {
                 PendingDetailsContent(
                     reservation = state.reservation!!,
@@ -141,7 +191,9 @@ private fun PendingDetailsContent(
             color = MaterialTheme.colorScheme.tertiaryContainer
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -152,8 +204,16 @@ private fun PendingDetailsContent(
                     modifier = Modifier.size(32.dp)
                 )
                 Column {
-                    Text(text = "Pending Approval", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(text = "This booking request needs your review", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    Text(
+                        text = "Pending Approval",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "This booking request needs your review",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
                 }
             }
         }
@@ -161,37 +221,111 @@ private fun PendingDetailsContent(
         AnugrahaCard {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 SectionLabel("Guest Information")
-                DetailRow(icon = Icons.Default.Person, label = "Guest Name", value = reservation.primaryGuest.fullName)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    DetailRow(icon = Icons.Default.Phone, label = "Mobile Number", value = reservation.primaryGuest.phone, modifier = Modifier.weight(1f))
-                    Button(onClick = { onCallClick(reservation.primaryGuest.phone) }, colors = ButtonDefaults.buttonColors(containerColor = SecondaryOrange)) {
+                DetailRow(
+                    icon = Icons.Default.Person,
+                    label = "Guest Name",
+                    value = reservation.primaryGuest.fullName
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DetailRow(
+                        icon = Icons.Default.Phone,
+                        label = "Mobile Number",
+                        value = reservation.primaryGuest.phone,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = { onCallClick(reservation.primaryGuest.phone) },
+                        colors = ButtonDefaults.buttonColors(containerColor = SecondaryOrange)
+                    ) {
                         Text("CALL")
                     }
                 }
-                reservation.primaryGuest.email?.let { DetailRow(icon = Icons.Default.Email, label = "Email", value = it) }
-                DetailRow(icon = Icons.Default.People, label = "Total Guests", value = "${reservation.adults} Adults${if (reservation.kids > 0) ", ${reservation.kids} Kids" else ""}")
-                if (reservation.hasPet) DetailRow(icon = Icons.Default.Pets, label = "Pets", value = "Yes")
+                reservation.primaryGuest.email?.let {
+                    DetailRow(
+                        icon = Icons.Default.Email,
+                        label = "Email",
+                        value = it
+                    )
+                }
+                DetailRow(
+                    icon = Icons.Default.People,
+                    label = "Total Guests",
+                    value = "${reservation.adults} Adults${if (reservation.kids > 0) ", ${reservation.kids} Kids" else ""}"
+                )
+                if (reservation.hasPet) DetailRow(
+                    icon = Icons.Default.Pets,
+                    label = "Pets",
+                    value = "Yes"
+                )
             }
         }
 
         AnugrahaCard {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 SectionLabel("Booking Details")
-                DetailRow(icon = Icons.Default.ConfirmationNumber, label = "Booking Number", value = reservation.reservationNumber)
-                DetailRow(icon = Icons.Default.Login, label = "Check-in", value = reservation.checkInDate.toDisplayFormat())
-                DetailRow(icon = Icons.Default.Logout, label = "Check-out", value = reservation.checkOutDate.toDisplayFormat())
-                reservation.room?.let { DetailRow(icon = Icons.Default.Hotel, label = "Room Type", value = it.title) }
-                reservation.estimatedCheckInTime?.let { DetailRow(icon = Icons.Default.AccessTime, label = "Est. Check-in Time", value = it.toString()) }
-                DetailRow(icon = Icons.Default.Source, label = "Booking Source", value = reservation.bookingSource.displayName())
+                DetailRow(
+                    icon = Icons.Default.ConfirmationNumber,
+                    label = "Booking Number",
+                    value = reservation.reservationNumber
+                )
+                DetailRow(
+                    icon = Icons.Default.Login,
+                    label = "Check-in",
+                    value = reservation.checkInDate.toDisplayFormat()
+                )
+                DetailRow(
+                    icon = Icons.Default.Logout,
+                    label = "Check-out",
+                    value = reservation.checkOutDate.toDisplayFormat()
+                )
+                reservation.room?.let {
+                    DetailRow(
+                        icon = Icons.Default.Hotel,
+                        label = "Room Type",
+                        value = it.title
+                    )
+                }
+                reservation.estimatedCheckInTime?.let {
+                    DetailRow(
+                        icon = Icons.Default.AccessTime,
+                        label = "Est. Check-in Time",
+                        value = it.toString()
+                    )
+                }
+                DetailRow(
+                    icon = Icons.Default.Source,
+                    label = "Booking Source",
+                    value = reservation.bookingSource.displayName()
+                )
             }
         }
 
         AnugrahaCard {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 SectionLabel("Payment Information")
-                DetailRow(icon = Icons.Default.AttachMoney, label = "Total Amount", value = reservation.totalAmount.toCurrency())
-                reservation.paymentStatus?.let { DetailRow(icon = Icons.Default.CreditCard, label = "Payment Status", value = it) }
-                reservation.transactionId?.let { DetailRow(icon = Icons.Default.Receipt, label = "Transaction ID", value = it) }
+                DetailRow(
+                    icon = Icons.Default.AttachMoney,
+                    label = "Total Amount",
+                    value = reservation.totalAmount.toCurrency()
+                )
+                reservation.paymentStatus?.let {
+                    DetailRow(
+                        icon = Icons.Default.CreditCard,
+                        label = "Payment Status",
+                        value = it
+                    )
+                }
+                reservation.transactionId?.let {
+                    DetailRow(
+                        icon = Icons.Default.Receipt,
+                        label = "Transaction ID",
+                        value = it
+                    )
+                }
             }
         }
 
@@ -201,16 +335,43 @@ private fun PendingDetailsContent(
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text = text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary
+    )
 }
 
 @Composable
-private fun DetailRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, modifier: Modifier = Modifier) {
-    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+private fun DetailRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
         Column {
-            Text(text = label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            Text(text = value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
@@ -218,14 +379,31 @@ private fun DetailRow(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
 @Composable
 private fun BottomActionButtons(onAccept: () -> Unit, onDecline: () -> Unit) {
     Surface(shadowElevation = 8.dp, color = MaterialTheme.colorScheme.surface) {
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onDecline, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                Icon(imageVector = Icons.Default.Close, contentDescription = null, modifier = Modifier.size(20.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onDecline,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Decline")
             }
             Button(onClick = onAccept, modifier = Modifier.weight(1f)) {
-                Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Accept")
             }
@@ -234,13 +412,75 @@ private fun BottomActionButtons(onAccept: () -> Unit, onDecline: () -> Unit) {
 }
 
 @Composable
-private fun ConfirmationDialog(title: String, message: String, confirmText: String, dismissText: String, onConfirm: () -> Unit, onDismiss: () -> Unit, isDestructive: Boolean = false) {
+private fun ConfirmationDialog(
+    title: String,
+    message: String,
+    confirmText: String,
+    dismissText: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    isDestructive: Boolean = false
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(imageVector = if (isDestructive) Icons.Default.Warning else Icons.Default.CheckCircle, contentDescription = null, tint = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) },
-        title = { Text(text = title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) },
+        icon = {
+            Icon(
+                imageVector = if (isDestructive) Icons.Default.Warning else Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = { Text(text = message) },
-        confirmButton = { Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)) { Text(confirmText) } },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+            ) { Text(confirmText) }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(dismissText) } }
+    )
+}
+
+@Composable
+private fun WhatsAppConfirmationDialog(
+    onYes: () -> Unit,
+    onNo: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onNo,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Message,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text(
+                text = "Send WhatsApp Confirmation",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Text(text = "Would you like to send a WhatsApp confirmation message to the guest?")
+        },
+        confirmButton = {
+            Button(onClick = onYes) {
+                Text("Yes")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onNo) {
+                Text("No")
+            }
+        }
     )
 }

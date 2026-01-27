@@ -9,4 +9,7 @@ sealed class PendingDetailsIntent : ViewIntent {
     object DismissDialog : PendingDetailsIntent()
     object ConfirmAccept : PendingDetailsIntent()
     object ConfirmDecline : PendingDetailsIntent()
+    object ShowWhatsAppDialog : PendingDetailsIntent()
+    object DismissWhatsAppDialog : PendingDetailsIntent()
+    object SendWhatsAppMessage : PendingDetailsIntent()
 }

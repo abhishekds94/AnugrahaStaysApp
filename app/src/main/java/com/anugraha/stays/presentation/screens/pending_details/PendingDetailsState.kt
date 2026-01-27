@@ -10,5 +10,6 @@ data class PendingDetailsState(
     val error: String? = null,
     val showAcceptDialog: Boolean = false,
     val showDeclineDialog: Boolean = false,
+    val showWhatsAppDialog: Boolean = false,
     val actionSuccess: Boolean = false
 ) : ViewState
