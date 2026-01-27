@@ -12,11 +12,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.anugraha.stays.domain.model.Reservation
+import com.anugraha.stays.domain.model.calculateExpectedAmount
+import com.anugraha.stays.domain.model.getPendingBalance
 import com.anugraha.stays.presentation.components.ErrorScreen
 import com.anugraha.stays.presentation.components.LoadingScreen
 import com.anugraha.stays.presentation.theme.SecondaryOrange
@@ -98,6 +101,19 @@ private fun BookingDetailsContent(
     onCallClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Safe balance calculation with error handling
+    val calculatedAmount = try {
+        reservation.calculateExpectedAmount()
+    } catch (e: Exception) {
+        null
+    }
+
+    val pendingBalance = try {
+        reservation.getPendingBalance()
+    } catch (e: Exception) {
+        0.0
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -168,12 +184,41 @@ private fun BookingDetailsContent(
 
                 SectionHeader("Payment Information")
 
+                // Calculated Amount (NEW) - only show if calculation succeeded
+                calculatedAmount?.let { amount ->
+                    DetailRow(
+                        icon = Icons.Default.Calculate,
+                        label = "Calculated Amount",
+                        value = "₹${String.format("%.2f", amount)}",
+                        valueStyle = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    )
+                }
+
                 DetailRow(
                     icon = Icons.Default.CurrencyRupee,
                     label = "Total Amount",
                     value = "₹${String.format("%.2f", reservation.totalAmount)}",
-                    valueStyle = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    valueStyle = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 )
+
+                // Show balance if there's a mismatch (NEW) - only if calculation succeeded
+                if (pendingBalance != 0.0 && calculatedAmount != null) {
+                    DetailRow(
+                        icon = if (pendingBalance > 0) Icons.Default.Warning else Icons.Default.Info,
+                        label = if (pendingBalance > 0) "Pending Balance" else "Excess Payment",
+                        value = "₹${String.format("%.2f", kotlin.math.abs(pendingBalance))}",
+                        valueStyle = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = if (pendingBalance > 0) Color(0xFFD32F2F) else Color(0xFF388E3C)
+                        )
+                    )
+                }
 
                 reservation.paymentStatus?.let { DetailRow(icon = Icons.Default.CreditCard, label = "Payment Status", value = it) }
                 reservation.transactionId?.let { DetailRow(icon = Icons.Default.Receipt, label = "Payment Reference", value = it) }

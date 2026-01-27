@@ -1,19 +1,19 @@
 package com.anugraha.stays.presentation.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.anugraha.stays.domain.model.BookingSource
 import com.anugraha.stays.domain.model.Reservation
-import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
+import com.anugraha.stays.domain.model.getPendingBalance
+import com.anugraha.stays.domain.model.hasPendingBalance
 import java.time.format.DateTimeFormatter
 
 @Composable
@@ -24,6 +24,19 @@ fun BookingCard(
 ) {
     val isExternal = reservation.bookingSource.isExternal()
     val dateFormatter = DateTimeFormatter.ofPattern("MMM dd, yyyy")
+
+    // Balance checking with safe error handling
+    var hasPendingBalance = false
+    var pendingBalance = 0.0
+
+    try {
+        hasPendingBalance = reservation.hasPendingBalance()
+        pendingBalance = if (hasPendingBalance) reservation.getPendingBalance() else 0.0
+    } catch (e: Exception) {
+        // If balance checking fails, just don't show it (card still works)
+        hasPendingBalance = false
+        pendingBalance = 0.0
+    }
 
     Card(
         onClick = {
@@ -73,6 +86,29 @@ fun BookingCard(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
+                    }
+
+                    // Show balance warning if there's a pending balance
+                    // Only show if not external and balance check succeeded
+                    if (!isExternal && hasPendingBalance && pendingBalance > 0) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Pending balance",
+                                modifier = Modifier.size(16.dp),
+                                tint = Color(0xFFD32F2F) // Red
+                            )
+                            Text(
+                                text = "Pending: ₹${String.format("%.0f", pendingBalance)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFD32F2F) // Red
+                            )
+                        }
                     }
                 }
 

@@ -18,6 +18,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.anugraha.stays.BuildConfig
+import com.anugraha.stays.domain.model.getPendingBalance
+import com.anugraha.stays.presentation.components.BalanceAlertDialog
 import com.anugraha.stays.presentation.components.ConfirmationDialog
 import com.anugraha.stays.presentation.components.ConfirmationMessages
 import com.anugraha.stays.presentation.components.ErrorScreen
@@ -27,9 +29,11 @@ import com.anugraha.stays.presentation.screens.dashboard.components.CheckOutSect
 import com.anugraha.stays.presentation.screens.dashboard.components.PendingReservationsSection
 import com.anugraha.stays.presentation.screens.dashboard.components.WeekBookingsSection
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
+import com.anugraha.stays.util.BalanceNotificationManager
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import kotlinx.coroutines.flow.collectLatest
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,10 +46,38 @@ fun DashboardScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Balance alert management
+    val balanceManager = remember { BalanceNotificationManager(context) }
+    var showBalanceAlert by remember { mutableStateOf(false) }
+    var alertGuestName by remember { mutableStateOf("") }
+    var alertBalance by remember { mutableStateOf(0.0) }
+
     // Confirmation dialog states
     var showAcceptDialog by remember { mutableStateOf(false) }
     var showDeclineDialog by remember { mutableStateOf(false) }
     var selectedReservationId by remember { mutableStateOf<Int?>(null) }
+
+    // Check for bookings needing popup when data loads
+    LaunchedEffect(state.todayCheckIns, state.todayCheckOuts) {
+        val allReservations = state.todayCheckIns.map { it.reservation } +
+                state.todayCheckOuts.map { it.reservation }
+
+    // Check for bookings needing popup today
+    val bookingsNeedingPopup = balanceManager.getBookingsNeedingPopup(allReservations)
+
+    if (bookingsNeedingPopup.isNotEmpty()) {
+        val firstBooking = bookingsNeedingPopup.first()
+        alertGuestName = firstBooking.primaryGuest.fullName
+        alertBalance = firstBooking.getPendingBalance()
+        showBalanceAlert = true
+
+        // Mark as shown so it won't show again today
+        balanceManager.markPopupShown(firstBooking.id, LocalDate.now())
+    }
+
+    // Schedule notifications for all bookings with pending balance
+    balanceManager.scheduleBalanceNotifications(allReservations)
+    }
 
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
@@ -58,6 +90,14 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+
+    if (showBalanceAlert) {
+        BalanceAlertDialog(
+            guestName = alertGuestName,
+            pendingBalance = alertBalance,
+            onDismiss = { showBalanceAlert = false }
+        )
     }
 
     // Accept Booking Confirmation Dialog

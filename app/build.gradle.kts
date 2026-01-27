@@ -1,8 +1,10 @@
+import org.gradle.kotlin.dsl.implementation
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")  // ADDED THIS - Compose Compiler Plugin
-    id("com.google.devtools.ksp")  // CHANGED from kapt to ksp
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
     id("com.google.gms.google-services")
     id("kotlin-parcelize")
@@ -117,7 +119,10 @@ dependencies {
     implementation("com.google.accompanist:accompanist-systemuicontroller:0.34.0")
     implementation("com.google.accompanist:accompanist-swiperefresh:0.34.0")
 
-    implementation("androidx.datastore:datastore-preferences:1.0.0")
+    // WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.8.1")
+    implementation("androidx.hilt:hilt-work:1.1.0")
+    ksp("androidx.hilt:hilt-compiler:1.1.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

@@ -232,25 +232,36 @@ class DashboardViewModel @Inject constructor(
     }
 
     private suspend fun loadTodayCheckOuts() {
-        val result = getTodayCheckOutsUseCase()
-        when (result) {
+        android.util.Log.d("VIEWMODEL_DEBUG", "Loading today's checkouts...")
+
+        when (val result = getTodayCheckOutsUseCase()) {
             is NetworkResult.Success -> {
+                android.util.Log.d("VIEWMODEL_DEBUG", "SUCCESS: Received ${result.data?.size ?: 0} checkouts")
+                result.data?.forEach { checkout ->
+                    android.util.Log.d("VIEWMODEL_DEBUG", "  - Guest: ${checkout.reservation.primaryGuest.fullName}")
+                }
+
                 updateState {
                     it.copy(
                         todayCheckOuts = result.data ?: emptyList(),
                         isLoadingCheckOuts = false
                     )
                 }
+
+                android.util.Log.d("VIEWMODEL_DEBUG", "State updated. Current checkouts: ${state.value.todayCheckOuts.size}")
             }
             is NetworkResult.Error -> {
+                android.util.Log.e("VIEWMODEL_DEBUG", "ERROR: ${result.message}")
                 updateState {
                     it.copy(
-                        isLoadingCheckOuts = false,
-                        error = result.message
+                        error = result.message,
+                        isLoadingCheckOuts = false
                     )
                 }
             }
-            NetworkResult.Loading -> {}
+            NetworkResult.Loading -> {
+                android.util.Log.d("VIEWMODEL_DEBUG", "LOADING...")
+            }
         }
     }
 
