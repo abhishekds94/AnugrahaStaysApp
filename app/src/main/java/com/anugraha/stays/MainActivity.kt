@@ -19,6 +19,7 @@ import com.anugraha.stays.presentation.navigation.NavGraph
 import com.anugraha.stays.presentation.navigation.Screen
 import com.anugraha.stays.presentation.theme.AnugrahaStaysTheme
 import com.anugraha.stays.util.BaseViewModel
+import com.anugraha.stays.util.BookingNotificationWorkManager
 import com.anugraha.stays.util.ViewEffect
 import com.anugraha.stays.util.ViewIntent
 import com.anugraha.stays.util.ViewState
@@ -30,13 +31,29 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var bookingNotificationWorkManager: BookingNotificationWorkManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Trigger immediate check when app is opened
+        bookingNotificationWorkManager.triggerImmediateCheck()
+
         setContent {
             AnugrahaStaysTheme {
-                MainScreen()
+                MainScreen(
+                    navigateTo = intent.getStringExtra("navigate_to"),
+                    reservationId = intent.getIntExtra("reservation_id", -1)
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
     }
 }
 
@@ -71,11 +88,27 @@ class MainViewModel @Inject constructor(
 
 @Composable
 fun MainScreen(
+    navigateTo: String? = null,
+    reservationId: Int = -1,
     viewModel: MainViewModel = hiltViewModel()
 ) {
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
+
+    // Handle notification navigation
+    LaunchedEffect(navigateTo, reservationId) {
+        when (navigateTo) {
+            "pending_details" -> {
+                if (reservationId != -1) {
+                    navController.navigate("${Screen.PendingDetails.route}/$reservationId")
+                }
+            }
+            "reservations" -> {
+                navController.navigate(Screen.Reservations.route)
+            }
+        }
+    }
 
     LaunchedEffect(viewModel.effect) {
         viewModel.effect.collectLatest { effect ->
