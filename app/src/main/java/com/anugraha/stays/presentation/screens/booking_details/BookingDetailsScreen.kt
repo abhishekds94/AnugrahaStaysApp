@@ -2,6 +2,7 @@ package com.anugraha.stays.presentation.screens.booking_details
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,11 +18,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.anugraha.stays.domain.model.Document
 import com.anugraha.stays.domain.model.Reservation
 import com.anugraha.stays.domain.model.calculateExpectedAmount
 import com.anugraha.stays.domain.model.getPendingBalance
 import com.anugraha.stays.presentation.components.ErrorScreen
 import com.anugraha.stays.presentation.components.LoadingScreen
+import com.anugraha.stays.presentation.screens.booking_details.components.DocumentsSection
 import com.anugraha.stays.presentation.theme.SecondaryOrange
 import com.anugraha.stays.util.DateUtils.toDisplayFormat
 import kotlinx.coroutines.flow.collectLatest
@@ -36,6 +39,7 @@ fun BookingDetailsScreen(
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    var showImageSourceDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(reservationId) {
         viewModel.handleIntent(BookingDetailsIntent.LoadBooking(reservationId))
@@ -48,18 +52,16 @@ fun BookingDetailsScreen(
                     snackbarHostState.showSnackbar(effect.message)
                 }
                 is BookingDetailsEffect.ShowToast -> {
-                    android.widget.Toast.makeText(context, effect.message, android.widget.Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
                 }
                 is BookingDetailsEffect.OpenWhatsApp -> {
                     try {
-                        // Try WhatsApp Business first
                         val intent = Intent(Intent.ACTION_VIEW).apply {
                             data = Uri.parse("https://api.whatsapp.com/send?phone=${effect.phoneNumber}")
                             setPackage("com.whatsapp.w4b")
                         }
                         context.startActivity(intent)
                     } catch (e: Exception) {
-                        // Fallback to regular WhatsApp
                         try {
                             val intent = Intent(Intent.ACTION_VIEW).apply {
                                 data = Uri.parse("https://api.whatsapp.com/send?phone=${effect.phoneNumber}")
@@ -67,9 +69,22 @@ fun BookingDetailsScreen(
                             }
                             context.startActivity(intent)
                         } catch (ex: Exception) {
-                            // Show error if WhatsApp is not installed
-                            android.widget.Toast.makeText(context, "WhatsApp is not installed", android.widget.Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show()
                         }
+                    }
+                }
+                BookingDetailsEffect.ShowImageSourceDialog -> {
+                    showImageSourceDialog = true
+                }
+                is BookingDetailsEffect.OpenImageViewer -> {
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(Uri.parse(effect.imageUrl), "image/*")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    try {
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "No app to view images", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -109,12 +124,40 @@ fun BookingDetailsScreen(
             state.reservation != null -> {
                 BookingDetailsContent(
                     reservation = state.reservation!!,
+                    documents = state.documents,
+                    isUploadingDocument = state.isUploadingDocument,
+                    showDocumentOptions = state.showDocumentOptions,
                     onCallClick = { phone ->
                         val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
                         context.startActivity(intent)
                     },
                     onWhatsAppClick = { phone ->
                         viewModel.handleIntent(BookingDetailsIntent.OpenWhatsApp(phone))
+                    },
+                    onUploadClick = {
+                        showImageSourceDialog = true
+                    },
+                    onDocumentClick = { document ->
+                        viewModel.handleIntent(BookingDetailsIntent.ShowDocumentOptions(document))
+                    },
+                    onGallerySelected = { uri ->
+                        viewModel.handleIntent(BookingDetailsIntent.UploadDocument(uri))
+                    },
+                    onCameraSelected = { uri ->
+                        viewModel.handleIntent(BookingDetailsIntent.UploadDocument(uri))
+                    },
+                    onViewDocument = { document ->
+                        viewModel.handleIntent(BookingDetailsIntent.ViewDocument(document))
+                    },
+                    onDeleteDocument = { document ->
+                        viewModel.handleIntent(BookingDetailsIntent.DeleteDocument(document))
+                    },
+                    onDismissDocumentOptions = {
+                        viewModel.handleIntent(BookingDetailsIntent.DismissDocumentOptions)
+                    },
+                    showImageSourceDialog = showImageSourceDialog,
+                    onDismissImageSource = {
+                        showImageSourceDialog = false
                     },
                     modifier = Modifier.padding(paddingValues)
                 )
@@ -126,29 +169,41 @@ fun BookingDetailsScreen(
 @Composable
 private fun BookingDetailsContent(
     reservation: Reservation,
+    documents: List<Document>,
+    isUploadingDocument: Boolean,
+    showDocumentOptions: Document?,
     onCallClick: (String) -> Unit,
     onWhatsAppClick: (String) -> Unit,
+    onUploadClick: () -> Unit,
+    onDocumentClick: (Document) -> Unit,
+    onGallerySelected: (Uri) -> Unit,
+    onCameraSelected: (Uri) -> Unit,
+    onViewDocument: (Document) -> Unit,
+    onDeleteDocument: (Document) -> Unit,
+    onDismissDocumentOptions: () -> Unit,
+    showImageSourceDialog: Boolean,
+    onDismissImageSource: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Safe balance calculation with error handling
     val calculatedAmount = try {
         reservation.calculateExpectedAmount()
     } catch (e: Exception) {
         null
     }
 
-    val pendingBalance = try {
+    val pendingBalance = if (calculatedAmount != null) {
         reservation.getPendingBalance()
-    } catch (e: Exception) {
+    } else {
         0.0
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -158,34 +213,50 @@ private fun BookingDetailsContent(
         ) {
             Column(
                 modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                SectionHeader("Guest Details")
+                SectionHeader("Guest Information")
 
                 DetailRow(icon = Icons.Default.Person, label = "Guest Name", value = reservation.primaryGuest.fullName)
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    DetailRow(icon = Icons.Default.Phone, label = "Phone", value = reservation.primaryGuest.phone, modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    DetailRow(
+                        icon = Icons.Default.Phone,
+                        label = "Phone",
+                        value = reservation.primaryGuest.phone,
+                        modifier = Modifier.weight(1f)
+                    )
+
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        IconButton(
+                            onClick = { onWhatsAppClick(reservation.primaryGuest.phone) },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = Color(0xFF25D366)
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Message,
+                                contentDescription = "WhatsApp",
+                                tint = Color.White
+                            )
+                        }
+
                         Button(
                             onClick = { onCallClick(reservation.primaryGuest.phone) },
                             colors = ButtonDefaults.buttonColors(containerColor = SecondaryOrange),
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(
+                                imageVector = Icons.Default.Call,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("CALL")
-                        }
-
-                        IconButton(
-                            onClick = { onWhatsAppClick(reservation.primaryGuest.phone) },
-                            colors = IconButtonDefaults.iconButtonColors(containerColor = Color(0xFF25D366))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Whatsapp,
-                                contentDescription = "WhatsApp",
-                                tint = Color.White
-                            )
                         }
                     }
                 }
@@ -226,7 +297,6 @@ private fun BookingDetailsContent(
 
                 SectionHeader("Payment Information")
 
-                // Calculated Amount (NEW) - only show if calculation succeeded
                 calculatedAmount?.let { amount ->
                     DetailRow(
                         icon = Icons.Default.Calculate,
@@ -249,7 +319,6 @@ private fun BookingDetailsContent(
                     )
                 )
 
-                // Show balance if there's a mismatch (NEW) - only if calculation succeeded
                 if (pendingBalance != 0.0 && calculatedAmount != null) {
                     DetailRow(
                         icon = if (pendingBalance > 0) Icons.Default.Warning else Icons.Default.Info,
@@ -266,13 +335,46 @@ private fun BookingDetailsContent(
                 reservation.transactionId?.let { DetailRow(icon = Icons.Default.Receipt, label = "Payment Reference", value = it) }
             }
         }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                DocumentsSection(
+                    documents = documents,
+                    isUploading = isUploadingDocument,
+                    showImageSourceDialog = showImageSourceDialog,
+                    showDocumentOptions = showDocumentOptions,
+                    onUploadClick = onUploadClick,
+                    onDocumentClick = onDocumentClick,
+                    onGallerySelected = onGallerySelected,
+                    onCameraSelected = onCameraSelected,
+                    onViewDocument = onViewDocument,
+                    onDeleteDocument = onDeleteDocument,
+                    onDismissImageSource = onDismissImageSource,
+                    onDismissDocumentOptions = onDismissDocumentOptions
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
 @Composable
 private fun SectionHeader(text: String) {
-    Text(text = text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary
+    )
 }
 
 @Composable
@@ -284,11 +386,31 @@ private fun DetailRow(
     isPlaceholder: Boolean = false,
     valueStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyLarge
 ) {
-    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = if (isPlaceholder) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = if (isPlaceholder) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            Text(text = value, style = valueStyle, fontWeight = FontWeight.Medium, color = if (isPlaceholder) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onSurface)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+            Text(
+                text = value,
+                style = valueStyle,
+                fontWeight = FontWeight.Medium,
+                color = if (isPlaceholder) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                else MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
