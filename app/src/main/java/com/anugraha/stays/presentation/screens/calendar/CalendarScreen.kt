@@ -28,6 +28,8 @@ import com.anugraha.stays.presentation.components.ConfirmationDialog
 import com.anugraha.stays.presentation.components.ConfirmationMessages
 import com.anugraha.stays.presentation.components.ErrorScreen
 import com.anugraha.stays.presentation.components.LoadingScreen
+import com.anugraha.stays.util.BookingType
+import com.anugraha.stays.util.CalendarDataOptimizer
 import kotlinx.coroutines.flow.collectLatest
 import java.time.LocalDate
 import java.time.YearMonth
@@ -190,6 +192,8 @@ private fun CalendarContent(
             selectedDate = state.selectedDate ?: LocalDate.now(),
             reservations = state.reservations,
             availabilities = state.availabilities,
+            processedData = state.processedCalendarData,
+            calendarDataOptimizer = remember { CalendarDataOptimizer() },
             onDateSelected = { onIntent(CalendarIntent.DateSelected(it)) },
             onMonthChanged = { onIntent(CalendarIntent.LoadMonth(it)) },
             modifier = Modifier.padding(horizontal = 16.dp)
@@ -232,6 +236,8 @@ private fun CalendarGrid(
     selectedDate: LocalDate,
     reservations: List<Reservation>,
     availabilities: List<Availability>,
+    processedData: CalendarDataOptimizer.ProcessedCalendarData?,
+    calendarDataOptimizer: CalendarDataOptimizer,
     onDateSelected: (LocalDate) -> Unit,
     onMonthChanged: (YearMonth) -> Unit,
     modifier: Modifier = Modifier
@@ -292,7 +298,14 @@ private fun CalendarGrid(
                                 } else if (dayCounter <= daysInMonth) {
                                     val date = currentMonth.atDay(dayCounter)
                                     val isSelected = date == selectedDate
-                                    val bookingType = getBookingTypeForDate(date, reservations, availabilities)
+
+                                    // Use optimized O(1) lookup instead of O(n) scan
+                                    val bookingType = if (processedData != null) {
+                                        calendarDataOptimizer.getBookingType(date, processedData)
+                                    } else {
+                                        // Fallback (should rarely happen)
+                                        getBookingTypeForDate(date, reservations, availabilities)
+                                    }
 
                                     CalendarDay(
                                         day = dayCounter,

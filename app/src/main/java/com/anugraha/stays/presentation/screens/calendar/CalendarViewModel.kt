@@ -1,6 +1,7 @@
 package com.anugraha.stays.presentation.screens.calendar
 
 import androidx.lifecycle.viewModelScope
+import com.anugraha.stays.data.cache.DataCacheManager
 import com.anugraha.stays.domain.model.AvailabilityStatus
 import com.anugraha.stays.domain.model.ICalConfig
 import com.anugraha.stays.domain.repository.ICalSyncRepository
@@ -9,6 +10,7 @@ import com.anugraha.stays.domain.usecase.availability.UpdateAvailabilityUseCase
 import com.anugraha.stays.domain.usecase.reservation.DeclineReservationUseCase
 import com.anugraha.stays.domain.usecase.reservation.GetReservationsUseCase
 import com.anugraha.stays.util.BaseViewModel
+import com.anugraha.stays.util.CalendarDataOptimizer
 import com.anugraha.stays.util.DateUtils
 import com.anugraha.stays.util.NetworkResult
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,7 +27,9 @@ class CalendarViewModel @Inject constructor(
     private val updateAvailabilityUseCase: UpdateAvailabilityUseCase,
     private val getReservationsUseCase: GetReservationsUseCase,
     private val declineReservationUseCase: DeclineReservationUseCase,
-    private val iCalSyncRepository: ICalSyncRepository
+    private val iCalSyncRepository: ICalSyncRepository,
+    private val dataCacheManager: DataCacheManager,
+    private val calendarDataOptimizer: CalendarDataOptimizer
 ) : BaseViewModel<CalendarState, CalendarIntent, CalendarEffect>(CalendarState()) {
 
     init {
@@ -42,7 +46,33 @@ class CalendarViewModel @Inject constructor(
                 )
             }
 
-            val availabilityDeferred = async { getMonthAvailability(YearMonth.from(DateUtils.now())) }
+            val currentMonth = YearMonth.from(DateUtils.now())
+
+            // Try to use cached data first for instant loading
+            val cachedAvailability = dataCacheManager.getAvailability(currentMonth, forceRefresh = false)
+            val cachedBookings = dataCacheManager.getAllReservations(forceRefresh = false)
+
+            if (cachedAvailability.isNotEmpty() || cachedBookings.isNotEmpty()) {
+                // Process data once for fast lookups
+                val processedData = calendarDataOptimizer.processMonthData(
+                    currentMonth,
+                    cachedBookings,
+                    cachedAvailability
+                )
+
+                // Show cached data immediately
+                updateState {
+                    it.copy(
+                        availabilities = cachedAvailability,
+                        reservations = cachedBookings,
+                        processedCalendarData = processedData,
+                        isLoading = false
+                    )
+                }
+            }
+
+            // Then fetch fresh data in background
+            val availabilityDeferred = async { getMonthAvailability(currentMonth) }
             val bookingsDeferred = async { getBookings() }
             val syncDeferred = async { syncExternalBookings() }
 
@@ -50,13 +80,24 @@ class CalendarViewModel @Inject constructor(
             val bookings = bookingsDeferred.await()
             syncDeferred.await()
 
+            // Process fresh data
+            val processedData = calendarDataOptimizer.processMonthData(
+                currentMonth,
+                bookings,
+                availability
+            )
+
             updateState {
                 it.copy(
                     availabilities = availability,
                     reservations = bookings,
+                    processedCalendarData = processedData,
                     isLoading = false
                 )
             }
+
+            // Preload adjacent months for smoother navigation
+            dataCacheManager.preloadAdjacentMonths(currentMonth)
         }
     }
 
@@ -64,8 +105,45 @@ class CalendarViewModel @Inject constructor(
         when (intent) {
             is CalendarIntent.LoadMonth -> {
                 viewModelScope.launch {
+                    // Try cache first
+                    val cachedAvailability = dataCacheManager.getAvailability(intent.yearMonth, forceRefresh = false)
+                    val cachedBookings = currentState.reservations // Reuse loaded bookings
+
+                    // Process cached data
+                    val processedData = calendarDataOptimizer.processMonthData(
+                        intent.yearMonth,
+                        cachedBookings,
+                        cachedAvailability
+                    )
+
+                    updateState {
+                        it.copy(
+                            currentMonth = intent.yearMonth,
+                            availabilities = cachedAvailability,
+                            processedCalendarData = processedData
+                        )
+                    }
+
+                    // Then fetch fresh data
                     val availability = getMonthAvailability(intent.yearMonth)
-                    updateState { it.copy(currentMonth = intent.yearMonth, availabilities = availability) }
+
+                    // Process fresh data
+                    val freshProcessedData = calendarDataOptimizer.processMonthData(
+                        intent.yearMonth,
+                        cachedBookings,
+                        availability
+                    )
+
+                    updateState {
+                        it.copy(
+                            currentMonth = intent.yearMonth,
+                            availabilities = availability,
+                            processedCalendarData = freshProcessedData
+                        )
+                    }
+
+                    // Preload adjacent months
+                    dataCacheManager.preloadAdjacentMonths(intent.yearMonth)
                 }
             }
             is CalendarIntent.DateSelected -> selectDate(intent.date)
@@ -73,7 +151,20 @@ class CalendarViewModel @Inject constructor(
             is CalendarIntent.LoadBookings -> {
                 viewModelScope.launch {
                     val bookings = getBookings()
-                    updateState { it.copy(reservations = bookings) }
+
+                    // Re-process calendar data with new bookings
+                    val processedData = calendarDataOptimizer.processMonthData(
+                        currentState.currentMonth,
+                        bookings,
+                        currentState.availabilities
+                    )
+
+                    updateState {
+                        it.copy(
+                            reservations = bookings,
+                            processedCalendarData = processedData
+                        )
+                    }
                 }
             }
             is CalendarIntent.BlockDate -> blockDate(intent.date)
@@ -91,24 +182,32 @@ class CalendarViewModel @Inject constructor(
     }
 
     private suspend fun getMonthAvailability(yearMonth: YearMonth): List<com.anugraha.stays.domain.model.Availability> {
-        return when (val result = getAvailabilityUseCase(yearMonth)) {
-            is NetworkResult.Success -> result.data ?: emptyList()
-            is NetworkResult.Error -> {
-                sendEffect(CalendarEffect.ShowError(result.message ?: "Failed to load availability"))
-                emptyList()
+        return try {
+            dataCacheManager.getAvailability(yearMonth, forceRefresh = true)
+        } catch (e: Exception) {
+            when (val result = getAvailabilityUseCase(yearMonth)) {
+                is NetworkResult.Success -> result.data ?: emptyList()
+                is NetworkResult.Error -> {
+                    sendEffect(CalendarEffect.ShowError(result.message ?: "Failed to load availability"))
+                    emptyList()
+                }
+                NetworkResult.Loading -> emptyList()
             }
-            NetworkResult.Loading -> emptyList()
         }
     }
 
     private suspend fun getBookings(): List<com.anugraha.stays.domain.model.Reservation> {
-        return when (val result = getReservationsUseCase(page = 1, perPage = 1000, status = null)) {
-            is NetworkResult.Success -> result.data ?: emptyList()
-            is NetworkResult.Error -> {
-                sendEffect(CalendarEffect.ShowError(result.message ?: "Failed to load bookings"))
-                emptyList()
+        return try {
+            dataCacheManager.getAllReservations(forceRefresh = true)
+        } catch (e: Exception) {
+            when (val result = getReservationsUseCase(page = 1, perPage = 1000, status = null)) {
+                is NetworkResult.Success -> result.data ?: emptyList()
+                is NetworkResult.Error -> {
+                    sendEffect(CalendarEffect.ShowError(result.message ?: "Failed to load bookings"))
+                    emptyList()
+                }
+                NetworkResult.Loading -> emptyList()
             }
-            NetworkResult.Loading -> emptyList()
         }
     }
 
@@ -134,7 +233,21 @@ class CalendarViewModel @Inject constructor(
 
         if (result is NetworkResult.Success) {
             val bookings = getBookings()
-            updateState { it.copy(reservations = bookings) }
+
+            // Re-process calendar data
+            val processedData = calendarDataOptimizer.processMonthData(
+                currentState.currentMonth,
+                bookings,
+                currentState.availabilities
+            )
+
+            updateState {
+                it.copy(
+                    reservations = bookings,
+                    processedCalendarData = processedData
+                )
+            }
+
             if (failureMessage != null) {
                 sendEffect(CalendarEffect.ShowToast(failureMessage))
             }
@@ -165,7 +278,20 @@ class CalendarViewModel @Inject constructor(
             when (val result = updateAvailabilityUseCase(date, newStatus)) {
                 is NetworkResult.Success -> {
                     val availability = getMonthAvailability(currentState.currentMonth)
-                    updateState { it.copy(availabilities = availability) }
+
+                    // Re-process calendar data
+                    val processedData = calendarDataOptimizer.processMonthData(
+                        currentState.currentMonth,
+                        currentState.reservations,
+                        availability
+                    )
+
+                    updateState {
+                        it.copy(
+                            availabilities = availability,
+                            processedCalendarData = processedData
+                        )
+                    }
                 }
                 is NetworkResult.Error -> {
                     sendEffect(CalendarEffect.ShowError(result.message ?: "Update failed"))
@@ -206,12 +332,25 @@ class CalendarViewModel @Inject constructor(
                         )
                     }
                     delay(500)
+
+                    // Refresh cache after successful action
+                    dataCacheManager.refreshAll()
+
                     val availability = getMonthAvailability(currentState.currentMonth)
                     val bookings = getBookings()
+
+                    // Re-process calendar data
+                    val processedData = calendarDataOptimizer.processMonthData(
+                        currentState.currentMonth,
+                        bookings,
+                        availability
+                    )
+
                     updateState {
                         it.copy(
                             availabilities = availability,
-                            reservations = bookings
+                            reservations = bookings,
+                            processedCalendarData = processedData
                         )
                     }
                 }

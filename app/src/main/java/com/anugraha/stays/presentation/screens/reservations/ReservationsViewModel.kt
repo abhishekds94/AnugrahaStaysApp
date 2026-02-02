@@ -1,6 +1,7 @@
 package com.anugraha.stays.presentation.screens.reservations
 
 import androidx.lifecycle.viewModelScope
+import com.anugraha.stays.data.cache.DataCacheManager
 import com.anugraha.stays.domain.model.Reservation
 import com.anugraha.stays.domain.model.ReservationStatus
 import com.anugraha.stays.domain.usecase.ical.GetExternalBookingsUseCase
@@ -19,7 +20,8 @@ import javax.inject.Inject
 class ReservationsViewModel @Inject constructor(
     private val getReservationsUseCase: GetReservationsUseCase,
     private val searchReservationsUseCase: SearchReservationsUseCase,
-    private val getExternalBookingsUseCase: GetExternalBookingsUseCase
+    private val getExternalBookingsUseCase: GetExternalBookingsUseCase,
+    private val dataCacheManager: DataCacheManager
 ) : BaseViewModel<ReservationsState, ReservationsIntent, ReservationsEffect>(ReservationsState()) {
 
     init {
@@ -38,6 +40,16 @@ class ReservationsViewModel @Inject constructor(
         viewModelScope.launch {
             updateState { it.copy(isLoading = true, isLoadingExternal = true, error = null) }
 
+            // Try to use cached data first for instant loading
+            val cachedReservations = dataCacheManager.getAllReservations(forceRefresh = false)
+
+            if (cachedReservations.isNotEmpty()) {
+                // Show cached data immediately
+                updateState { it.copy(reservations = cachedReservations, isLoading = false, isLoadingExternal = false) }
+                combineAndGroupReservations(cachedReservations)
+            }
+
+            // Then fetch fresh data in background
             val directReservationsDeferred = async { getDirectReservations() }
             val externalBookingsDeferred = async { getExternalBookings() }
 
@@ -54,21 +66,29 @@ class ReservationsViewModel @Inject constructor(
     }
 
     private suspend fun getDirectReservations(): List<Reservation> {
-        return when (val result = getReservationsUseCase(page = 1, perPage = 1000, status = null)) {
-            is NetworkResult.Success -> result.data ?: emptyList()
-            is NetworkResult.Error -> {
-                sendEffect(ReservationsEffect.ShowError(result.message ?: "Failed to load reservations"))
-                emptyList()
+        return try {
+            dataCacheManager.getReservations(forceRefresh = true)
+        } catch (e: Exception) {
+            when (val result = getReservationsUseCase(page = 1, perPage = 1000, status = null)) {
+                is NetworkResult.Success -> result.data ?: emptyList()
+                is NetworkResult.Error -> {
+                    sendEffect(ReservationsEffect.ShowError(result.message ?: "Failed to load reservations"))
+                    emptyList()
+                }
+                NetworkResult.Loading -> emptyList()
             }
-            NetworkResult.Loading -> emptyList()
         }
     }
 
     private suspend fun getExternalBookings(): List<Reservation> {
         return try {
-            getExternalBookingsUseCase()
+            dataCacheManager.getExternalBookings(forceRefresh = true)
         } catch (e: Exception) {
-            emptyList()
+            try {
+                getExternalBookingsUseCase()
+            } catch (e: Exception) {
+                emptyList()
+            }
         }
     }
 
