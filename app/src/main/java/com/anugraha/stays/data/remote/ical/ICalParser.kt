@@ -81,6 +81,16 @@ class ICalParser {
 
             if (startDate == null || endDate == null) return null
 
+            // Log ALL available fields to see what data we're getting
+            Log.d("ICalParser", "=== Event from ${source.name} ===")
+            Log.d("ICalParser", "All available fields:")
+            eventData.forEach { (key, value) ->
+                // Truncate long values for readability
+                val displayValue = if (value.length > 100) value.take(100) + "..." else value
+                Log.d("ICalParser", "  $key: $displayValue")
+            }
+            Log.d("ICalParser", "=================================")
+
             ICalEvent(
                 uid = uid,
                 summary = summary,

@@ -2,11 +2,13 @@ package com.anugraha.stays.presentation.screens.reservations
 
 import androidx.lifecycle.viewModelScope
 import com.anugraha.stays.data.cache.DataCacheManager
+import com.anugraha.stays.domain.model.BookingSource
 import com.anugraha.stays.domain.model.Reservation
 import com.anugraha.stays.domain.model.ReservationStatus
 import com.anugraha.stays.domain.usecase.ical.GetExternalBookingsUseCase
 import com.anugraha.stays.domain.usecase.reservation.GetReservationsUseCase
 import com.anugraha.stays.domain.usecase.reservation.SearchReservationsUseCase
+import com.anugraha.stays.util.AdvancedBookingDeduplicator
 import com.anugraha.stays.util.BaseViewModel
 import com.anugraha.stays.util.NetworkResult
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,7 +23,8 @@ class ReservationsViewModel @Inject constructor(
     private val getReservationsUseCase: GetReservationsUseCase,
     private val searchReservationsUseCase: SearchReservationsUseCase,
     private val getExternalBookingsUseCase: GetExternalBookingsUseCase,
-    private val dataCacheManager: DataCacheManager
+    private val dataCacheManager: DataCacheManager,
+    private val advancedDeduplicator: AdvancedBookingDeduplicator
 ) : BaseViewModel<ReservationsState, ReservationsIntent, ReservationsEffect>(ReservationsState()) {
 
     init {
@@ -44,9 +47,16 @@ class ReservationsViewModel @Inject constructor(
             val cachedReservations = dataCacheManager.getAllReservations(forceRefresh = false)
 
             if (cachedReservations.isNotEmpty()) {
-                // Show cached data immediately
-                updateState { it.copy(reservations = cachedReservations, isLoading = false, isLoadingExternal = false) }
-                combineAndGroupReservations(cachedReservations)
+                android.util.Log.d("ReservationsVM", "=== Showing Cached Data ===")
+                android.util.Log.d("ReservationsVM", "Cached reservations (before dedup): ${cachedReservations.size}")
+
+                // Apply advanced deduplication to cached data
+                val deduplicatedCache = advancedDeduplicator.deduplicateAllBookings(cachedReservations)
+                android.util.Log.d("ReservationsVM", "Cached reservations (after dedup): ${deduplicatedCache.size}")
+
+                // Show deduplicated cached data immediately
+                updateState { it.copy(reservations = deduplicatedCache, isLoading = false, isLoadingExternal = false) }
+                combineAndGroupReservations(deduplicatedCache)
             }
 
             // Then fetch fresh data in background
@@ -56,10 +66,23 @@ class ReservationsViewModel @Inject constructor(
             val directReservations = directReservationsDeferred.await()
             val externalBookings = externalBookingsDeferred.await()
 
-            val allReservations = directReservations + externalBookings
-            updateState { it.copy(reservations = allReservations) }
+            android.util.Log.d("ReservationsVM", "=== Fresh Data Loaded ===")
+            android.util.Log.d("ReservationsVM", "Direct reservations: ${directReservations.size}")
+            android.util.Log.d("ReservationsVM", "External bookings: ${externalBookings.size}")
 
-            combineAndGroupReservations(allReservations)
+            // Combine all bookings
+            val allReservations = directReservations + externalBookings
+            android.util.Log.d("ReservationsVM", "Combined total (before advanced dedup): ${allReservations.size}")
+
+            // Apply advanced deduplication
+            // This removes both cross-platform duplicates AND direct booking conflicts
+            val deduplicatedReservations = advancedDeduplicator.deduplicateAllBookings(allReservations)
+            android.util.Log.d("ReservationsVM", "After advanced dedup: ${deduplicatedReservations.size}")
+            android.util.Log.d("ReservationsVM", "Removed ${allReservations.size - deduplicatedReservations.size} total duplicates")
+
+            updateState { it.copy(reservations = deduplicatedReservations) }
+
+            combineAndGroupReservations(deduplicatedReservations)
 
             updateState { it.copy(isLoading = false, isLoadingExternal = false) }
         }
@@ -67,10 +90,28 @@ class ReservationsViewModel @Inject constructor(
 
     private suspend fun getDirectReservations(): List<Reservation> {
         return try {
-            dataCacheManager.getReservations(forceRefresh = true)
+            val all = dataCacheManager.getReservations(forceRefresh = true)
+
+            // CRITICAL FIX: Filter out external bookings from direct API
+            // External bookings come separately from iCal sync
+            val filtered = all.filter {
+                it.bookingSource != BookingSource.AIRBNB &&
+                        it.bookingSource != BookingSource.BOOKING_COM
+            }
+
+            android.util.Log.d("ReservationsVM", "Direct API returned ${all.size} total, filtered out ${all.size - filtered.size} external, keeping ${filtered.size} direct")
+
+            filtered
         } catch (e: Exception) {
             when (val result = getReservationsUseCase(page = 1, perPage = 1000, status = null)) {
-                is NetworkResult.Success -> result.data ?: emptyList()
+                is NetworkResult.Success -> {
+                    val all = result.data ?: emptyList()
+                    // Also filter here
+                    all.filter {
+                        it.bookingSource != BookingSource.AIRBNB &&
+                                it.bookingSource != BookingSource.BOOKING_COM
+                    }
+                }
                 is NetworkResult.Error -> {
                     sendEffect(ReservationsEffect.ShowError(result.message ?: "Failed to load reservations"))
                     emptyList()

@@ -8,6 +8,7 @@ import com.anugraha.stays.data.remote.firebase.FirebaseAuthDataSource
 import com.anugraha.stays.data.remote.ical.ICalParser
 import com.anugraha.stays.data.repository.*
 import com.anugraha.stays.domain.repository.*
+import com.anugraha.stays.util.AdvancedBookingDeduplicator
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -18,7 +19,6 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object RepositoryModule {
 
-    // AUTH REPOSITORY - Uses Firebase (NO CHANGES NEEDED)
     @Provides
     @Singleton
     fun provideAuthRepository(
@@ -28,7 +28,6 @@ object RepositoryModule {
         return AuthRepositoryImpl(firebaseAuthDataSource, userPreferences)
     }
 
-    // DASHBOARD REPOSITORY - ADD iCalSyncRepository
     @Provides
     @Singleton
     fun provideDashboardRepository(
@@ -38,7 +37,6 @@ object RepositoryModule {
         return DashboardRepositoryImpl(api, iCalSyncRepository)
     }
 
-    // RESERVATION REPOSITORY - ADD iCalSyncRepository
     @Provides
     @Singleton
     fun provideReservationRepository(
@@ -48,7 +46,6 @@ object RepositoryModule {
         return ReservationRepositoryImpl(api, iCalSyncRepository)
     }
 
-    // AVAILABILITY REPOSITORY - NO CHANGES
     @Provides
     @Singleton
     fun provideAvailabilityRepository(
@@ -57,7 +54,6 @@ object RepositoryModule {
         return AvailabilityRepositoryImpl(api)
     }
 
-    // BOOKING REPOSITORY - NO CHANGES
     @Provides
     @Singleton
     fun provideBookingRepository(
@@ -66,7 +62,6 @@ object RepositoryModule {
         return BookingRepositoryImpl(api)
     }
 
-    // STATEMENT REPOSITORY - ADD iCalSyncRepository
     @Provides
     @Singleton
     fun provideStatementRepository(
@@ -75,8 +70,6 @@ object RepositoryModule {
     ): StatementRepository {
         return StatementRepositoryImpl(api, iCalSyncRepository)
     }
-
-    // ==================== ICAL SYNC PROVIDERS ====================
 
     @Provides
     @Singleton
@@ -94,8 +87,9 @@ object RepositoryModule {
     @Singleton
     fun provideICalSyncRepository(
         parser: ICalParser,
-        dao: ExternalBookingDao
+        dao: ExternalBookingDao,
+        advancedBookingDeduplicator: AdvancedBookingDeduplicator
     ): ICalSyncRepository {
-        return ICalSyncRepositoryImpl(parser, dao)
+        return ICalSyncRepositoryImpl(parser, dao, advancedBookingDeduplicator)
     }
 }
