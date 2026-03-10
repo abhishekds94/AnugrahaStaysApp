@@ -27,7 +27,12 @@ import com.anugraha.stays.presentation.components.LoadingScreen
 import com.anugraha.stays.presentation.screens.booking_details.components.DocumentsSection
 import com.anugraha.stays.presentation.theme.SecondaryOrange
 import com.anugraha.stays.util.DateUtils.toDisplayFormat
+import com.anugraha.stays.util.MessageFormatter
+import com.anugraha.stays.util.MessageFormatter.createWelcomeMessage
+import com.anugraha.stays.util.PhoneNumberUtils
 import kotlinx.coroutines.flow.collectLatest
+import java.time.format.DateTimeFormatter
+import androidx.core.net.toUri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,22 +60,49 @@ fun BookingDetailsScreen(
                     Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
                 }
                 is BookingDetailsEffect.OpenWhatsApp -> {
-                    try {
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            data = Uri.parse("https://api.whatsapp.com/send?phone=${effect.phoneNumber}")
-                            setPackage("com.whatsapp.w4b")
-                        }
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
+                    state.reservation?.let { reservation ->
+                        // Format phone number with country code
+                        val formattedPhone = PhoneNumberUtils.formatForWhatsApp(effect.phoneNumber)
+                        val whatsappNumber = formattedPhone.removePrefix("+")
+
+                        // Create welcome message
+                        val message = MessageFormatter.createWelcomeMessage(reservation)
+                        val encodedMessage = Uri.encode(message)
+
                         try {
                             val intent = Intent(Intent.ACTION_VIEW).apply {
-                                data = Uri.parse("https://api.whatsapp.com/send?phone=${effect.phoneNumber}")
-                                setPackage("com.whatsapp")
+                                data =
+                                    "https://wa.me/$whatsappNumber?text=$encodedMessage".toUri()
+                                setPackage("com.whatsapp.w4b")
                             }
                             context.startActivity(intent)
-                        } catch (ex: Exception) {
-                            Toast.makeText(context, "WhatsApp is not installed", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    data =
+                                        "https://wa.me/$whatsappNumber?text=$encodedMessage".toUri()
+                                    setPackage("com.whatsapp")
+                                }
+                                context.startActivity(intent)
+                            } catch (ex: Exception) {
+                                try {
+                                    val browserIntent = Intent(Intent.ACTION_VIEW).apply {
+                                        data =
+                                            "https://wa.me/$whatsappNumber?text=$encodedMessage".toUri()
+                                    }
+                                    context.startActivity(browserIntent)
+                                } catch (e2: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "Could not open WhatsApp",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
                         }
+                    } ?: run {
+                        Toast.makeText(context, "Booking details not available", Toast.LENGTH_SHORT)
+                            .show()
                     }
                 }
                 BookingDetailsEffect.ShowImageSourceDialog -> {
@@ -78,7 +110,7 @@ fun BookingDetailsScreen(
                 }
                 is BookingDetailsEffect.OpenImageViewer -> {
                     val intent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(Uri.parse(effect.imageUrl), "image/*")
+                        setDataAndType(effect.imageUrl.toUri(), "image/*")
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     try {
@@ -239,7 +271,7 @@ private fun BookingDetailsContent(
                             )
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Message,
+                                imageVector = Icons.Default.Whatsapp,
                                 contentDescription = "WhatsApp",
                                 tint = Color.White
                             )
@@ -255,8 +287,6 @@ private fun BookingDetailsContent(
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("CALL")
                         }
                     }
                 }
